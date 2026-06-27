@@ -8,4 +8,4 @@ Nexus NX-OS, IOS-XR, Arista EOS, Juniper Junos); an optional NetBox block adds
 source-of-truth lookups. Preview: not yet full-coverage.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

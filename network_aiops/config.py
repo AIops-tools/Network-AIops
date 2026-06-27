@@ -3,10 +3,16 @@
 Loads connection targets (network devices) from a YAML config file. Each device
 declares a NAPALM ``driver`` (ios / nxos / nxos_ssh / iosxr / eos / junos), a
 ``host``, a ``username``, and optional ``optional_args`` (port, secret,
-transport). Passwords are NOT stored here — they live in ``~/.network-aiops/.env``
-as ``NETWORK_<TARGET_UPPER>_PASSWORD``. An optional ``netbox`` block (url +
-token) enables source-of-truth lookups; the NetBox token lives in the same
-``.env`` as ``NETWORK_NETBOX_TOKEN``.
+transport). Secrets are NEVER stored here and never on disk in plaintext: both
+the per-device login password and the optional NetBox API token live in the
+encrypted store ``~/.network-aiops/secrets.enc`` (see
+:mod:`network_aiops.secretstore`). Device passwords are keyed by the device
+target name; the NetBox token is keyed by the reserved name ``netbox-token``.
+
+For backward compatibility the legacy plaintext env vars
+(``NETWORK_<TARGET_UPPER>_PASSWORD`` and ``NETWORK_NETBOX_TOKEN``, e.g. from an
+old ``~/.network-aiops/.env``) are still honoured as a fallback, with a warning
+nudging migration to the encrypted store.
 """
 
 from __future__ import annotations
@@ -20,9 +26,21 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
+from network_aiops.secretstore import (
+    NETBOX_TOKEN_NAME,
+    SecretStoreError,
+    get_secret,
+    has_store,
+)
+
 CONFIG_DIR = Path.home() / ".network-aiops"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 ENV_FILE = CONFIG_DIR / ".env"
+
+# Legacy env-var prefix/suffix; also used by the migration helper.
+SECRET_ENV_PREFIX = "NETWORK_"  # nosec B105 — env var prefix, not a secret
+SECRET_ENV_SUFFIX = "_PASSWORD"  # nosec B105 — env var suffix, not a secret
+NETBOX_TOKEN_ENV = "NETWORK_NETBOX_TOKEN"  # nosec B105 — env var name, not a secret
 
 _log = logging.getLogger("network-aiops.config")
 
@@ -68,6 +86,51 @@ def password_env_var(target_name: str) -> str:
     return f"NETWORK_{safe}_PASSWORD"
 
 
+def _resolve_password(name: str) -> str:
+    """Resolve a device's login password: encrypted store first, then legacy env.
+
+    Returns "" when no secret is found anywhere — an empty password is valid for
+    key-based SSH auth (configured via ``optional_args``), so a missing password
+    is a warning (surfaced by ``network-aiops doctor``), not a hard error.
+    """
+    if has_store():
+        try:
+            return get_secret(name)
+        except SecretStoreError:
+            pass  # fall through to legacy env var
+    legacy = os.environ.get(password_env_var(name))
+    if legacy:
+        _log.warning(
+            "Using plaintext env var %s. Migrate to the encrypted store with "
+            "'network-aiops secret migrate'.",
+            password_env_var(name),
+        )
+        return legacy
+    return ""
+
+
+def _resolve_netbox_token() -> str:
+    """Resolve the NetBox API token: encrypted store first, then legacy env.
+
+    Returns "" when not found (NetBox is optional; the connection layer raises a
+    teaching error if a NetBox call is attempted without a token).
+    """
+    if has_store():
+        try:
+            return get_secret(NETBOX_TOKEN_NAME)
+        except SecretStoreError:
+            pass
+    legacy = os.environ.get(NETBOX_TOKEN_ENV)
+    if legacy:
+        _log.warning(
+            "Using plaintext env var %s. Migrate to the encrypted store with "
+            "'network-aiops secret migrate'.",
+            NETBOX_TOKEN_ENV,
+        )
+        return legacy
+    return ""
+
+
 @dataclass(frozen=True)
 class TargetConfig:
     """A network device connection target.
@@ -85,22 +148,25 @@ class TargetConfig:
     optional_args: dict = field(default_factory=dict)
 
     def password(self) -> str:
-        """Resolve the device password from the environment (may be empty)."""
-        return os.environ.get(password_env_var(self.name), "")
+        """Resolve the device password from the encrypted store (or legacy env).
+
+        May be empty (valid for key-based SSH auth).
+        """
+        return _resolve_password(self.name)
 
 
 @dataclass(frozen=True)
 class NetBoxConfig:
     """Optional NetBox source-of-truth connection.
 
-    ``url`` is the NetBox base URL; the API token is read from the environment
-    (``NETWORK_NETBOX_TOKEN``) and never stored in config.yaml.
+    ``url`` is the NetBox base URL; the API token comes from the encrypted store
+    (reserved name ``netbox-token``) or a legacy env var, never config.yaml.
     """
 
     url: str
 
     def token(self) -> str:
-        return os.environ.get("NETWORK_NETBOX_TOKEN", "")
+        return _resolve_netbox_token()
 
 
 @dataclass(frozen=True)

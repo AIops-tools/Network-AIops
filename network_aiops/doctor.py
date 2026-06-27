@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from rich.console import Console
 
-from network_aiops.config import CONFIG_FILE, load_config, password_env_var
+from network_aiops.config import CONFIG_FILE, ENV_FILE, load_config, password_env_var
+from network_aiops.secretstore import SECRETS_FILE, check_permissions, has_store
 
 _console = Console()
 
@@ -31,6 +32,22 @@ def run_doctor(skip_auth: bool = False) -> int:
         _console.print(f"[red]✗ Config load failed: {exc}[/]")
         return 1
 
+    if has_store():
+        _console.print(f"[green]✓ Encrypted secret store present: {SECRETS_FILE}[/]")
+        perm_warning = check_permissions()
+        if perm_warning:
+            _console.print(f"[yellow]! {perm_warning}[/]")
+    elif ENV_FILE.exists():
+        _console.print(
+            f"[yellow]! Using legacy plaintext .env ({ENV_FILE}). Migrate with "
+            f"'network-aiops secret migrate'.[/]"
+        )
+    else:
+        _console.print(
+            "[yellow]! No encrypted secret store yet. Run 'network-aiops init' to "
+            "set up credentials (stored encrypted).[/]"
+        )
+
     if not config.targets:
         _console.print("[yellow]! No devices configured.[/]")
         problems += 1
@@ -38,8 +55,10 @@ def run_doctor(skip_auth: bool = False) -> int:
         _console.print(f"[green]✓ {len(config.targets)} device(s) configured[/]")
         for t in config.targets:
             var = password_env_var(t.name)
-            present = "set" if t.password() else "MISSING"
-            _console.print(f"  [dim]{t.name} ({t.driver}@{t.host}) — {var}: {present}[/]")
+            present = "set" if t.password() else "missing (key-auth or run init)"
+            _console.print(
+                f"  [dim]{t.name} ({t.driver}@{t.host}) — password: {present} ({var})[/]"
+            )
 
     if config.netbox is not None:
         present = "set" if config.netbox.token() else "MISSING"

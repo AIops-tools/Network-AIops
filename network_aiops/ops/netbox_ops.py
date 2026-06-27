@@ -34,6 +34,27 @@ def netbox_list_devices(api: Any, limit: int = 50, name: str | None = None) -> l
     return [_device_summary(d) for d in devices]
 
 
+def netbox_device_interfaces(api: Any, device: str, limit: int = 100) -> list[dict]:
+    """[READ] List interfaces of a NetBox device (name, type, enabled, description).
+
+    ``device`` is the exact NetBox device name. Returns the intended interface
+    inventory from source-of-truth — handy to compare against live device state.
+    """
+    interfaces = api.dcim.interfaces.filter(device=device, limit=max(1, limit))
+    out: list[dict] = []
+    for i in interfaces:
+        out.append(
+            {
+                "name": s(getattr(i, "name", ""), 64),
+                "type": s(getattr(getattr(i, "type", None), "value", ""), 64),
+                "enabled": bool(getattr(i, "enabled", False)),
+                "description": s(getattr(i, "description", ""), 200),
+                "mac_address": s(getattr(i, "mac_address", "") or "", 32),
+            }
+        )
+    return out
+
+
 def netbox_get_device(api: Any, name: str) -> dict:
     """[READ] Return a single NetBox device by exact name."""
     device = api.dcim.devices.get(name=name)

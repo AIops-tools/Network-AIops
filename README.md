@@ -8,10 +8,12 @@
 > [github.com/AIops-tools/Network-AIops](https://github.com/AIops-tools/Network-AIops)
 > under the MIT license.
 
-Governed multi-vendor network device operations for AI agents — **13 MCP tools**,
+Governed multi-vendor network device operations for AI agents — **28 MCP tools**,
 every one wrapped with the bundled `@governed_tool` harness: a local unified audit
 log under `~/.network-aiops/`, policy engine, token/runaway budget guard,
-undo-token recording, and graduated-autonomy risk tiers.
+undo-token recording, and graduated-autonomy risk tiers. Credentials (device
+passwords + the NetBox token) are kept in an **encrypted store** (`secrets.enc`),
+never plaintext on disk.
 
 Devices are reached over [NAPALM](https://napalm.readthedocs.io/); an optional
 NetBox block adds source-of-truth lookups.
@@ -22,9 +24,17 @@ NetBox block adds source-of-truth lookups.
 
 ## What works
 
-Read device facts/interfaces/IP/BGP/LLDP/ARP, back up the running config, dry-run
-a config diff, and merge/replace/rollback config — across the five core NAPALM
-platforms below. Optional NetBox lookups confirm intended state before a change.
+Read device facts, interfaces (+ counters/IP), BGP/LLDP neighbors (summary and
+detail), ARP/MAC tables, VLANs, route lookups, hardware environment, optics, NTP,
+users, SNMP info, VRFs, and an aggregated `device_health`; back up the running
+config, dry-run a config diff, and merge/replace/rollback config — across the five
+core NAPALM platforms below. Optional NetBox lookups (devices + interfaces) confirm
+intended state before a change.
+
+NAPALM does not implement every getter on every platform; an unsupported getter
+returns a teaching error ("not supported by the `<driver>` driver") rather than
+crashing. Secrets are never returned — `get_users` redacts password hashes and
+`get_snmp_information` redacts community strings.
 
 ## Supported devices
 
@@ -46,10 +56,21 @@ See [Contributing](#contributing--feature-requests).
 |--------|------|:---:|:----:|
 | Device facts (hostname/vendor/model/OS/serial/uptime) | `device_facts` | R | low |
 | Interfaces (up/down, speed, description) | `get_interfaces` | R | low |
+| Interface traffic + error counters | `get_interfaces_counters` | R | low |
 | Interface IP addresses | `get_interfaces_ip` | R | low |
-| BGP neighbors | `get_bgp_neighbors` | R | low |
-| LLDP neighbors | `get_lldp_neighbors` | R | low |
+| BGP neighbors (summary / detail) | `get_bgp_neighbors` / `get_bgp_neighbors_detail` | R | low |
+| LLDP neighbors (summary / detail) | `get_lldp_neighbors` / `get_lldp_neighbors_detail` | R | low |
 | ARP table | `get_arp_table` | R | low |
+| MAC address table | `get_mac_address_table` | R | low |
+| VLANs | `get_vlans` | R | low |
+| Route lookup | `get_route_to` | R | low |
+| Hardware environment (fans/temp/power/CPU/mem) | `get_environment` | R | low |
+| Optical transceiver levels | `get_optics` | R | low |
+| NTP servers / sync stats | `get_ntp_servers` / `get_ntp_stats` | R | low |
+| Local users (hashes redacted) | `get_users` | R | low |
+| SNMP info (communities redacted) | `get_snmp_information` | R | low |
+| Network instances (VRFs) | `get_network_instances` | R | low |
+| Aggregated device health | `device_health` | R | low |
 | Back up running config | `config_backup` | R | low |
 | Diff a candidate (dry-run) | `config_diff` | R | low |
 | Merge config + commit | `config_merge` | W | medium |
@@ -57,13 +78,16 @@ See [Contributing](#contributing--feature-requests).
 | Roll back last commit | `config_rollback` | W | medium |
 | NetBox list devices | `netbox_list_devices` | R | low |
 | NetBox get device | `netbox_get_device` | R | low |
+| NetBox device interfaces | `netbox_device_interfaces` | R | low |
 
 ## Quick Start
 
 ```bash
 uv tool install network-aiops
+network-aiops init                                  # wizard: device + driver + host + encrypted password
 network-aiops doctor
 network-aiops device facts -t core-sw1
+network-aiops device health -t core-sw1
 network-aiops config backup -t core-sw1 -o core-sw1.cfg
 ```
 
@@ -83,12 +107,23 @@ netbox:
   url: https://netbox.example.com
 ```
 
-Put secrets in `~/.network-aiops/.env` (chmod 600) — never in config.yaml:
+Secrets are stored **encrypted** in `~/.network-aiops/secrets.enc` (Fernet/AES +
+scrypt-derived key; chmod 600) — never in config.yaml or a plaintext `.env`.
+Device passwords are keyed by device name; the NetBox token uses the reserved
+name `netbox-token`:
 
 ```bash
-NETWORK_CORE_SW1_PASSWORD=...     # NETWORK_<TARGET_UPPER>_PASSWORD
-NETWORK_NETBOX_TOKEN=...
+network-aiops init                     # interactive wizard (recommended)
+network-aiops secret set core-sw1      # store a device password (hidden prompt)
+network-aiops secret set netbox-token  # store the NetBox API token
+network-aiops secret list              # names only — values are never printed
+network-aiops secret migrate           # import a legacy plaintext .env, then delete it
 ```
+
+Export `NETWORK_AIOPS_MASTER_PASSWORD` to unlock the store non-interactively (MCP
+server / cron). Legacy plaintext env vars (`NETWORK_<TARGET_UPPER>_PASSWORD`,
+`NETWORK_NETBOX_TOKEN`) remain a deprecated fallback. An empty device password is
+allowed for key-based SSH auth.
 
 ## MCP
 
@@ -96,7 +131,10 @@ NETWORK_NETBOX_TOKEN=...
 {
   "command": "network-aiops",
   "args": ["mcp"],
-  "env": { "NETWORK_AIOPS_CONFIG": "~/.network-aiops/config.yaml" }
+  "env": {
+    "NETWORK_AIOPS_CONFIG": "~/.network-aiops/config.yaml",
+    "NETWORK_AIOPS_MASTER_PASSWORD": "…"   // unlocks the encrypted secret store
+  }
 }
 ```
 
@@ -110,6 +148,8 @@ NETWORK_NETBOX_TOKEN=...
   merge/replace/rollback`) require double confirmation and support `--dry-run`
   (which prints the diff without committing).
 - All device text passes through `sanitize()` (prompt-injection defense).
+- Device passwords and the NetBox token live only in the encrypted `secrets.enc`
+  (chmod 600); tools never return passwords, SNMP community strings, or hashes.
 
 See `skills/network-aiops/SKILL.md` and `SECURITY.md` for details.
 

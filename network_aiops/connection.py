@@ -147,14 +147,15 @@ def netbox_api(netbox: NetBoxConfig | None):
     if netbox is None:
         raise NetworkApiError(
             "NetBox is not configured. Add a 'netbox: {url: ...}' block to "
-            "~/.network-aiops/config.yaml and set NETWORK_NETBOX_TOKEN in "
-            "~/.network-aiops/.env to use source-of-truth lookups."
+            "~/.network-aiops/config.yaml and store the API token encrypted with "
+            "'network-aiops secret set netbox-token' (or 'network-aiops init') "
+            "to use source-of-truth lookups."
         )
     token = netbox.token()
     if not token:
         raise NetworkApiError(
-            "NetBox token missing. Set NETWORK_NETBOX_TOKEN in "
-            "~/.network-aiops/.env (chmod 600)."
+            "NetBox token missing. Store it encrypted with "
+            "'network-aiops secret set netbox-token' (or run 'network-aiops init')."
         )
     try:
         import pynetbox

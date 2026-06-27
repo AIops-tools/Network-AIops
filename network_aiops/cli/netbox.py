@@ -37,3 +37,20 @@ def netbox_get_cmd(name: str) -> None:
     api = get_manager().netbox()
     for k, v in netbox_ops.netbox_get_device(api, name).items():
         console.print(f"  [cyan]{k}:[/] {v}")
+
+
+@netbox_app.command("interfaces")
+@cli_errors
+def netbox_interfaces_cmd(
+    device: str,
+    limit: int = typer.Option(100, "--limit", help="Max interfaces to return"),
+) -> None:
+    """List a NetBox device's interfaces (from source-of-truth)."""
+    api = get_manager().netbox()
+    rows = netbox_ops.netbox_device_interfaces(api, device, limit=limit)
+    table = Table(title=f"NetBox interfaces — {device}")
+    for col in ("name", "type", "enabled", "description"):
+        table.add_column(col)
+    for r in rows:
+        table.add_row(r["name"], r["type"], str(r["enabled"]), r["description"])
+    console.print(table)

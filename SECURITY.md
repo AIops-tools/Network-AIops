@@ -19,14 +19,26 @@ undisclosed vulnerabilities.
 
 ### Credential Management
 
-Device passwords are read from `~/.network-aiops/.env` as
-`NETWORK_<TARGET_UPPER>_PASSWORD` (one per device); enable/secret and transport
-options go in the device's `optional_args` and are passed verbatim to NAPALM. The
-optional NetBox token is read from `NETWORK_NETBOX_TOKEN`. `config.yaml` holds
-only device names, drivers, hosts, usernames, and `optional_args` — never
-secrets. The state directory `~/.network-aiops` should be owner-only
-(`chmod 700`) and `.env` `chmod 600`; the skill warns if the directory is more
-permissive. Credentials are never read into results, logged, or echoed.
+Device login passwords and the optional NetBox API token are stored in an
+**encrypted** secret store at `~/.network-aiops/secrets.enc` — Fernet
+(AES-128-CBC + HMAC-SHA256) with a key derived from a master password via scrypt.
+The master password is never written to disk; only a random per-store salt and
+the ciphertext are persisted, and the blob is `chmod 600`. Device passwords are
+keyed by the device name; the NetBox token uses the reserved name `netbox-token`.
+The store is unlocked with the `NETWORK_AIOPS_MASTER_PASSWORD` env var (for the
+MCP server / non-interactive use) or an interactive prompt; populate it with
+`network-aiops init` or `network-aiops secret set`. Legacy plaintext env vars
+(`NETWORK_<TARGET_UPPER>_PASSWORD`, `NETWORK_NETBOX_TOKEN`) remain a deprecated
+fallback with a warning, and `network-aiops secret migrate` imports an old
+`.env` into the encrypted store.
+
+Enable/secret and transport options go in the device's `optional_args` and are
+passed verbatim to NAPALM. `config.yaml` holds only device names, drivers, hosts,
+usernames, and `optional_args` — never login passwords or the NetBox token. The
+state directory `~/.network-aiops` should be owner-only (`chmod 700`); the skill
+warns if it is more permissive. Credentials are never read back into results,
+logged, or echoed — read getters additionally redact user password hashes and
+SNMP community strings.
 
 ### Destructive Operation Safety
 

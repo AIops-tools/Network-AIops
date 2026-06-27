@@ -4,6 +4,7 @@
 
 ```bash
 uv tool install network-aiops
+network-aiops init      # interactive onboarding wizard (recommended)
 network-aiops doctor
 ```
 
@@ -36,21 +37,34 @@ netbox:
   url: https://netbox.example.com
 ```
 
-### Secrets (never in config.yaml)
+### Secrets — encrypted store (never in config.yaml)
 
-Put passwords in `~/.network-aiops/.env` (chmod 600). The env var name is
-`NETWORK_<TARGET_UPPER>_PASSWORD` (non-alphanumeric characters become `_`):
+Secrets are stored **encrypted** in `~/.network-aiops/secrets.enc` (Fernet/AES +
+scrypt-derived key; chmod 600) — never in config.yaml or a plaintext `.env`.
+Device login passwords are keyed by the device name; the NetBox API token uses
+the reserved name `netbox-token`. The fastest path is `network-aiops init`, or
+set them individually:
 
 ```bash
-NETWORK_CORE_SW1_PASSWORD=...
-NETWORK_EDGE_RTR_PASSWORD=...
-NETWORK_NETBOX_TOKEN=...
+network-aiops secret set core-sw1       # hidden prompt for the device password
+network-aiops secret set edge-rtr
+network-aiops secret set netbox-token   # the NetBox API token
+network-aiops secret list               # names only — values are never printed
 ```
 
+Unlock the store non-interactively by exporting the master password (used by the
+MCP server, cron, CI):
+
 ```bash
+export NETWORK_AIOPS_MASTER_PASSWORD='your-master-password'
 chmod 700 ~/.network-aiops
-chmod 600 ~/.network-aiops/.env
 ```
+
+**Migrating from a legacy plaintext `.env`** (`NETWORK_<TARGET_UPPER>_PASSWORD`,
+`NETWORK_NETBOX_TOKEN`): run `network-aiops secret migrate` to import them into
+the encrypted store (the old file is renamed to `.env.migrated`; delete it once
+verified). Those env vars still work as a deprecated fallback with a warning. An
+empty device password is allowed for key-based SSH auth.
 
 ### Supported drivers
 
@@ -66,9 +80,11 @@ drivers but are untested here — request official support via a GitHub issue/PR
 1. **Source code** — [github.com/AIops-tools/Network-AIops](https://github.com/AIops-tools/Network-AIops), MIT.
 2. **Config file contents** — `config.yaml` holds only device names, drivers,
    hosts, usernames, and NAPALM `optional_args`. No credentials.
-3. **Credentials** — passwords live in `~/.network-aiops/.env`
-   (`NETWORK_<TARGET_UPPER>_PASSWORD`) and the NetBox token in
-   `NETWORK_NETBOX_TOKEN`; never read, logged, or echoed. Keep the dir 700, `.env` 600.
+3. **Credentials** — device passwords and the NetBox token live in the encrypted
+   store `~/.network-aiops/secrets.enc` (Fernet/AES, scrypt-derived key, chmod
+   600), unlocked by `NETWORK_AIOPS_MASTER_PASSWORD`; never read back, logged, or
+   echoed. Legacy plaintext env vars remain a deprecated fallback. Keep the dir
+   chmod 700.
 4. **TLS verification** — NAPALM transports (eAPI/NX-API HTTPS, NETCONF/SSH)
    follow each device's own certificate / SSH host-key configuration; the skill
    does not weaken it.
@@ -89,6 +105,8 @@ under `~/.network-aiops/` (override with `NETWORK_AIOPS_HOME`):
 - Token/runaway budget guard (`NETWORK_MAX_TOOL_CALLS`, `NETWORK_MAX_TOOL_SECONDS`,
   `NETWORK_RUNAWAY_MAX`, `NETWORK_RUNAWAY_WINDOW_SEC`).
 - Undo store — inverse descriptors for reversible writes (config merge/replace).
+- Encrypted secret store (`secrets.enc`) — device passwords + NetBox token,
+  unlocked by `NETWORK_AIOPS_MASTER_PASSWORD`.
 - Accountability: set `NETWORK_AUDIT_APPROVED_BY` / `NETWORK_AUDIT_RATIONALE` to
   record who authorized a high-tier operation and why.
 
@@ -98,7 +116,10 @@ under `~/.network-aiops/` (override with `NETWORK_AIOPS_HOME`):
 {
   "command": "network-aiops",
   "args": ["mcp"],
-  "env": { "NETWORK_AIOPS_CONFIG": "~/.network-aiops/config.yaml" }
+  "env": {
+    "NETWORK_AIOPS_CONFIG": "~/.network-aiops/config.yaml",
+    "NETWORK_AIOPS_MASTER_PASSWORD": "…"
+  }
 }
 ```
 

@@ -18,12 +18,21 @@ EXPECTED_TOOLS = {
     # facts (read)
     "device_facts", "get_interfaces", "get_interfaces_ip", "get_bgp_neighbors",
     "get_lldp_neighbors", "get_arp_table",
+    # neighbors detail (read)
+    "get_bgp_neighbors_detail", "get_lldp_neighbors_detail",
+    # inventory (read)
+    "get_interfaces_counters", "get_mac_address_table", "get_vlans", "get_route_to",
+    # environment (read)
+    "get_environment", "get_optics", "get_ntp_servers", "get_ntp_stats",
+    "get_users", "get_snmp_information", "get_network_instances",
+    # health (read)
+    "device_health",
     # config (read)
     "config_backup", "config_diff",
     # config (write)
     "config_merge", "config_replace", "config_rollback",
     # netbox (read)
-    "netbox_list_devices", "netbox_get_device",
+    "netbox_list_devices", "netbox_get_device", "netbox_device_interfaces",
 }
 
 WRITE_TOOLS_WITH_UNDO = {"config_merge", "config_replace"}
@@ -36,8 +45,13 @@ def test_all_modules_import():
         "network_aiops.config",
         "network_aiops.connection",
         "network_aiops.doctor",
+        "network_aiops.secretstore",
         "network_aiops.ops._shared",
         "network_aiops.ops.facts",
+        "network_aiops.ops.neighbors",
+        "network_aiops.ops.inventory",
+        "network_aiops.ops.environment",
+        "network_aiops.ops.health",
         "network_aiops.ops.config_ops",
         "network_aiops.ops.netbox_ops",
         "network_aiops.cli",
@@ -46,10 +60,16 @@ def test_all_modules_import():
         "network_aiops.cli.device",
         "network_aiops.cli.config",
         "network_aiops.cli.netbox",
+        "network_aiops.cli.secret",
+        "network_aiops.cli.init",
         "network_aiops.cli.doctor",
         "mcp_server.server",
         "mcp_server._shared",
         "mcp_server.tools.facts",
+        "mcp_server.tools.neighbors",
+        "mcp_server.tools.inventory",
+        "mcp_server.tools.environment",
+        "mcp_server.tools.health",
         "mcp_server.tools.config_ops",
         "mcp_server.tools.netbox",
     ):
@@ -60,7 +80,7 @@ def test_all_modules_import():
 def test_version():
     import network_aiops
 
-    assert network_aiops.__version__ == "0.1.0"
+    assert network_aiops.__version__ == "0.2.0"
 
 
 @pytest.mark.unit
@@ -70,7 +90,7 @@ def test_cli_app_builds_and_help_works():
     runner = CliRunner()
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for sub in ("device", "config", "netbox", "doctor", "mcp"):
+    for sub in ("device", "config", "netbox", "secret", "init", "doctor", "mcp"):
         assert sub in result.output
 
 
@@ -82,18 +102,25 @@ def test_cli_leaf_help_triggers_lazy_imports():
     runner = CliRunner()
     for cmd in (
         ["device", "--help"], ["config", "--help"], ["netbox", "--help"],
-        ["doctor", "--help"],
+        ["secret", "--help"], ["init", "--help"], ["doctor", "--help"],
     ):
         result = runner.invoke(app, cmd)
         assert result.exit_code == 0, f"{cmd} failed: {result.output}"
     for cmd in (
         ["device", "facts", "--help"], ["device", "interfaces", "--help"],
         ["device", "bgp", "--help"], ["device", "lldp", "--help"],
-        ["device", "arp", "--help"],
+        ["device", "arp", "--help"], ["device", "counters", "--help"],
+        ["device", "mac", "--help"], ["device", "vlans", "--help"],
+        ["device", "route", "--help"], ["device", "environment", "--help"],
+        ["device", "health", "--help"],
         ["config", "backup", "--help"], ["config", "diff", "--help"],
         ["config", "merge", "--help"], ["config", "replace", "--help"],
         ["config", "rollback", "--help"],
         ["netbox", "list", "--help"], ["netbox", "get", "--help"],
+        ["netbox", "interfaces", "--help"],
+        ["secret", "set", "--help"], ["secret", "list", "--help"],
+        ["secret", "rm", "--help"], ["secret", "migrate", "--help"],
+        ["secret", "rotate-password", "--help"],
     ):
         result = runner.invoke(app, cmd)
         assert result.exit_code == 0, f"{cmd} failed: {result.output}"
@@ -183,6 +210,90 @@ class _FakeDriver:
         return [{"interface": "Ethernet1", "ip": "10.0.0.2",
                  "mac": "00:aa:bb:cc:dd:ee", "age": 12.0}]
 
+    def get_bgp_neighbors_detail(self):
+        return {
+            "global": {
+                "10.0.0.2": [{
+                    "up": True, "local_as": 65000, "remote_as": 65001,
+                    "remote_router_id": "10.0.0.2", "connection_state": "Established",
+                    "received_prefix_count": 10, "accepted_prefix_count": 10,
+                    "advertised_prefix_count": 5,
+                }]
+            }
+        }
+
+    def get_lldp_neighbors_detail(self):
+        return {"Ethernet1": [{
+            "remote_chassis_id": "aabb.ccdd.eeff",
+            "remote_system_name": "core-sw2",
+            "remote_port": "Ethernet1",
+            "remote_port_description": "to core-sw1",
+            "remote_system_description": "Arista EOS",
+            "remote_system_capab": ["bridge", "router"],
+            "remote_system_enable_capab": ["bridge"],
+        }]}
+
+    def get_interfaces_counters(self):
+        return {"Ethernet1": {
+            "tx_octets": 1000, "rx_octets": 2000,
+            "tx_unicast_packets": 10, "rx_unicast_packets": 20,
+            "tx_errors": 0, "rx_errors": 1, "tx_discards": 0, "rx_discards": 0,
+        }}
+
+    def get_mac_address_table(self):
+        return [{"mac": "00:aa:bb:cc:dd:ee", "interface": "Ethernet1",
+                 "vlan": 10, "static": False, "active": True,
+                 "moves": 0, "last_move": 0.0}]
+
+    def get_vlans(self):
+        return {"10": {"name": "users", "interfaces": ["Ethernet1", "Ethernet2"]}}
+
+    def get_route_to(self, destination, protocol=""):
+        return {destination: [{
+            "protocol": "bgp", "current_active": True, "next_hop": "10.0.0.2",
+            "outgoing_interface": "Ethernet1", "preference": 200,
+            "selected_next_hop": True,
+        }]}
+
+    def get_environment(self):
+        return {
+            "fans": {"Fan1": {"status": True}},
+            "temperature": {"sensor1": {
+                "temperature": 40.0, "is_alert": False, "is_critical": False}},
+            "power": {"PSU1": {"status": True, "capacity": 600.0, "output": 100.0}},
+            "cpu": {"0": {"%usage": 12.5}},
+            "memory": {"available_ram": 1000000, "used_ram": 400000},
+        }
+
+    def get_optics(self):
+        return {"Ethernet1": {"physical_channels": {"channel": [{
+            "index": 0, "state": {
+                "input_power": {"instant": -3.0},
+                "output_power": {"instant": -2.0},
+                "laser_bias_current": {"instant": 30.0},
+            }}]}}}
+
+    def get_ntp_servers(self):
+        return {"10.0.0.99": {}}
+
+    def get_ntp_stats(self):
+        return [{"remote": "10.0.0.99", "synchronized": True, "stratum": 2,
+                 "type": "u", "reachability": 377, "delay": 1.0,
+                 "offset": 0.1, "jitter": 0.05}]
+
+    def get_users(self):
+        return {"admin": {"level": 15, "password": "$1$secrethash",
+                          "sshkeys": ["ssh-rsa AAA"]}}
+
+    def get_snmp_information(self):
+        return {"chassis_id": "ABC123", "community": {"public": {"mode": "ro"}},
+                "contact": "noc@lab", "location": "rack1"}
+
+    def get_network_instances(self):
+        return {"MGMT": {"name": "MGMT", "type": "L3VRF",
+                         "state": {"route_distinguisher": "65000:1"},
+                         "interfaces": {"interface": {"Ethernet1": {}}}}}
+
     def get_config(self, retrieve="running"):
         return {"running": "hostname core-sw1\n", "startup": "", "candidate": ""}
 
@@ -230,6 +341,140 @@ def test_facts_use_mocked_napalm_driver(monkeypatch):
     bgp = ops.get_bgp_neighbors(target)
     assert bgp[0]["remote_as"] == 65001
     assert ops.get_arp_table(target)[0]["ip"] == "10.0.0.2"
+
+
+@pytest.mark.unit
+def test_new_getters_use_mocked_napalm_driver(monkeypatch):
+    _patch_napalm(monkeypatch)
+    from network_aiops.config import TargetConfig
+    from network_aiops.ops import environment as env_ops
+    from network_aiops.ops import inventory as inv_ops
+    from network_aiops.ops import neighbors as nb_ops
+
+    target = TargetConfig(name="core-sw1", driver="eos", host="10.0.0.1", username="admin")
+
+    assert nb_ops.get_bgp_neighbors_detail(target)[0]["connection_state"] == "Established"
+    assert nb_ops.get_lldp_neighbors_detail(target)[0]["remote_system_name"] == "core-sw2"
+    assert inv_ops.get_interfaces_counters(target)[0]["rx_errors"] == 1
+    assert inv_ops.get_mac_address_table(target)[0]["vlan"] == 10
+    assert inv_ops.get_vlans(target)[0]["name"] == "users"
+    assert inv_ops.get_route_to(target, "10.0.0.0/24")[0]["next_hop"] == "10.0.0.2"
+
+    env = env_ops.get_environment(target)
+    assert env["memory"]["available_ram"] == 1000000
+    assert env_ops.get_optics(target)[0]["input_power"] == -3.0
+    assert env_ops.get_ntp_servers(target) == ["10.0.0.99"]
+    assert env_ops.get_ntp_stats(target)[0]["synchronized"] is True
+    assert env_ops.get_network_instances(target)[0]["name"] == "MGMT"
+
+
+@pytest.mark.unit
+def test_get_users_never_returns_password(monkeypatch):
+    """User password hashes must be redacted to a boolean, never returned."""
+    _patch_napalm(monkeypatch)
+    from network_aiops.config import TargetConfig
+    from network_aiops.ops import environment as env_ops
+
+    target = TargetConfig(name="core-sw1", driver="eos", host="10.0.0.1", username="admin")
+    users = env_ops.get_users(target)
+    assert users[0]["username"] == "admin"
+    assert users[0]["has_password"] is True
+    assert "password" not in users[0]
+    assert "$1$secrethash" not in str(users)
+
+
+@pytest.mark.unit
+def test_get_snmp_redacts_community(monkeypatch):
+    """SNMP community strings (secrets) are reduced to a count, never returned."""
+    _patch_napalm(monkeypatch)
+    from network_aiops.config import TargetConfig
+    from network_aiops.ops import environment as env_ops
+
+    target = TargetConfig(name="core-sw1", driver="eos", host="10.0.0.1", username="admin")
+    snmp = env_ops.get_snmp_information(target)
+    assert snmp["community_count"] == 1
+    assert "public" not in str(snmp)
+
+
+@pytest.mark.unit
+def test_device_health_aggregates(monkeypatch):
+    _patch_napalm(monkeypatch)
+    from network_aiops.config import TargetConfig
+    from network_aiops.ops import health as health_ops
+
+    target = TargetConfig(name="core-sw1", driver="eos", host="10.0.0.1", username="admin")
+    h = health_ops.device_health(target)
+    assert h["hostname"] == "core-sw1"
+    assert h["interfaces"]["total"] == 1
+    assert h["interfaces"]["up"] == 1
+    assert h["environment"]["fans_ok"] is True
+    assert h["healthy"] is True
+
+
+@pytest.mark.unit
+def test_device_health_tolerates_unsupported_environment(monkeypatch):
+    """A driver without get_environment yields a note, not a crash."""
+    _patch_napalm(monkeypatch)
+    from network_aiops.config import TargetConfig
+    from network_aiops.ops import health as health_ops
+
+    def _boom(self):
+        raise NotImplementedError("no get_environment")
+
+    monkeypatch.setattr(_FakeDriver, "get_environment", _boom)
+    target = TargetConfig(name="core-sw1", driver="eos", host="10.0.0.1", username="admin")
+    h = health_ops.device_health(target)
+    assert h["environment"] is None
+    assert h["notes"]  # the unsupported-getter message is recorded
+
+
+@pytest.mark.unit
+def test_getter_translates_notimplemented(monkeypatch):
+    """An unsupported getter returns a teaching 'not supported' NetworkApiError."""
+    _patch_napalm(monkeypatch)
+    from network_aiops.config import TargetConfig
+    from network_aiops.connection import NetworkApiError
+    from network_aiops.ops import inventory as inv_ops
+
+    def _boom(self):
+        raise NotImplementedError("driver lacks this")
+
+    monkeypatch.setattr(_FakeDriver, "get_vlans", _boom)
+    target = TargetConfig(name="core-sw1", driver="ios", host="10.0.0.1", username="admin")
+    with pytest.raises(NetworkApiError, match="not supported by the 'ios'"):
+        inv_ops.get_vlans(target)
+
+
+@pytest.mark.unit
+def test_config_password_resolves_from_encrypted_store(monkeypatch, tmp_path):
+    """TargetConfig.password() reads the encrypted store (no plaintext env)."""
+    import network_aiops.config as cfg
+    import network_aiops.secretstore as ss
+
+    monkeypatch.setattr(ss, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(ss, "SECRETS_FILE", tmp_path / "secrets.enc")
+    monkeypatch.setattr(ss, "LEGACY_ENV_FILE", tmp_path / ".env")
+    monkeypatch.setattr(ss, "_cached", None)
+    monkeypatch.delenv("NETWORK_CORE_SW1_PASSWORD", raising=False)
+    monkeypatch.setenv("NETWORK_AIOPS_MASTER_PASSWORD", "mpw")
+    ss.SecretStore.unlock("mpw").set("core-sw1", "encrypted-device-pw")
+
+    target = cfg.TargetConfig(name="core-sw1", driver="eos", host="1.1.1.1", username="admin")
+    assert target.password() == "encrypted-device-pw"
+
+
+@pytest.mark.unit
+def test_config_password_legacy_env_fallback(monkeypatch, tmp_path):
+    """Falls back to the legacy NETWORK_<NAME>_PASSWORD env var when no store."""
+    import network_aiops.config as cfg
+    import network_aiops.secretstore as ss
+
+    monkeypatch.setattr(ss, "SECRETS_FILE", tmp_path / "secrets.enc")  # no store on disk
+    monkeypatch.setattr(ss, "_cached", None)
+    monkeypatch.setenv("NETWORK_CORE_SW1_PASSWORD", "legacy-env-pw")
+
+    target = cfg.TargetConfig(name="core-sw1", driver="eos", host="1.1.1.1", username="admin")
+    assert target.password() == "legacy-env-pw"
 
 
 @pytest.mark.unit
@@ -354,6 +599,17 @@ def test_netbox_ops_with_mocked_pynetbox():
     api.dcim.devices.get.return_value = None
     miss = ops.netbox_get_device(api, "nope")
     assert "not found" in miss["error"]
+
+    iface = MagicMock()
+    iface.name = "Ethernet1"
+    iface.type.value = "10gbase-x-sfpp"
+    iface.enabled = True
+    iface.description = "uplink"
+    iface.mac_address = "00:11:22:33:44:55"
+    api.dcim.interfaces.filter.return_value = [iface]
+    ifaces = ops.netbox_device_interfaces(api, "edge-1")
+    assert ifaces[0]["name"] == "Ethernet1"
+    assert ifaces[0]["enabled"] is True
 
 
 @pytest.mark.unit
