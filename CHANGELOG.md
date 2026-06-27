@@ -1,0 +1,52 @@
+# Changelog
+
+All notable changes to **network-aiops** are documented here. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
+to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.2.0] — 2026-06-27
+
+Encrypted credentials, a friendly onboarding wizard, and MCP tools expanded from
+**13 → 28**.
+
+### Added
+- **Encrypted credential store** — both per-device login passwords **and** the
+  NetBox API token now live in `~/.network-aiops/secrets.enc` (Fernet/AES + HMAC,
+  scrypt-derived master password). No plaintext on disk; `chmod 600`. Device
+  passwords are keyed by device name; the NetBox token uses the reserved name
+  `netbox-token`.
+- **Onboarding wizard** — `network-aiops init` collects device name, NAPALM driver
+  (validated against the supported set), host, username, optional args, and a hidden
+  password (stored encrypted); optionally a NetBox URL + token.
+- **Secret management** — `network-aiops secret set/list/rm/migrate/rotate-password`
+  (`migrate` imports legacy `NETWORK_<TARGET>_PASSWORD` and `NETWORK_NETBOX_TOKEN`).
+- **NAPALM read getters** — BGP neighbors detail, LLDP neighbors detail, interface
+  counters/IPs, MAC address table, VLANs, `get_route_to`, environment
+  (fans/temp/power/CPU/mem), optics, NTP servers/stats, users, SNMP info, network
+  instances (VRFs), and an aggregated `device_health`.
+- **NetBox enrichment** — `netbox_device_interfaces` (source-of-truth interface list).
+
+### Changed
+- `config.py` resolves device passwords and the NetBox token from the encrypted
+  store first, then legacy env vars (with a deprecation warning). An empty device
+  password remains valid (key-based SSH auth).
+- `doctor` reports encrypted-store presence/permissions and nudges to `init`.
+- Added the `cryptography` dependency.
+
+### Security
+- Secrets are redacted in output: `get_users` reduces password hashes to a boolean,
+  `get_snmp_information` reduces community strings to a count. No tool returns
+  passwords or tokens. Master password via `NETWORK_AIOPS_MASTER_PASSWORD`.
+
+### Notes
+- NAPALM does not implement every getter on every platform; unsupported getters
+  return a teaching "not supported by the '<driver>' driver" error instead of
+  crashing. Still preview/mock-validated against a fake driver.
+
+## [0.1.0] — 2026-06-22
+
+Initial preview release: facts, config merge/replace/rollback, NetBox lookups
+(13 MCP tools), with the vendored governance harness.
+
+[0.2.0]: https://github.com/AIops-tools/Network-AIops/releases/tag/v0.2.0
+[0.1.0]: https://github.com/AIops-tools/Network-AIops/releases/tag/v0.1.0
