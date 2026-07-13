@@ -225,6 +225,7 @@ The device may not support full config replace (some Nexus images do not). Use `
 All operations are automatically audited via the bundled `@governed_tool` decorator (`network_aiops.governance`):
 - Every tool call logged to `~/.network-aiops/audit.db` (local SQLite audit DB; relocate with `NETWORK_AIOPS_HOME`)
 - Policy rules enforced via `~/.network-aiops/rules.yaml` (deny rules, maintenance windows, risk tiers)
+- **Secure by default (v0.3.0+)**: with no `~/.network-aiops/rules.yaml`, high/critical operations are denied unless `NETWORK_AUDIT_APPROVED_BY` names an approver (set `NETWORK_AUDIT_RATIONALE` too). `network-aiops init` seeds a starter rules.yaml; an operator-authored rules file is honoured as-is.
 - Budget / runaway guard caps cumulative tool calls and wall-time, and trips on tight poll/retry loops
 - Undo store records inverse descriptors for reversible writes (config merge/replace → restore captured running config)
 - Graduated-autonomy risk tiers gate write operations (require a recorded approver for the highest tiers)
