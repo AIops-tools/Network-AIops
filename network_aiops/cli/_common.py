@@ -5,10 +5,13 @@ from __future__ import annotations
 import functools
 from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 from rich.console import Console
+
+if TYPE_CHECKING:
+    from network_aiops.connection import ConnectionManager
 
 console = Console()
 
@@ -51,7 +54,7 @@ def cli_errors(fn: Callable) -> Callable:
     return wrapper
 
 
-def get_manager(config_path: Path | None = None):
+def get_manager(config_path: Path | None = None) -> ConnectionManager:
     """Return a ConnectionManager built from config."""
     from network_aiops.config import load_config
     from network_aiops.connection import ConnectionManager

@@ -147,7 +147,8 @@ allowed for key-based SSH auth.
 - `config_replace` is `risk_level=high`; CLI destructive commands (`config
   merge/replace/rollback`) require double confirmation and support `--dry-run`
   (which prints the diff without committing).
-- All device text passes through `sanitize()` (prompt-injection defense).
+- All device text passes through `sanitize()` (output hygiene: control/format-char
+  stripping + truncation).
 - Device passwords and the NetBox token live only in the encrypted `secrets.enc`
   (chmod 600); tools never return passwords, SNMP community strings, or hashes.
 

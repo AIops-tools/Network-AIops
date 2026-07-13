@@ -137,7 +137,7 @@ Other platforms (Nokia SR OS / SR Linux, Huawei VRP, etc.) are reachable via NAP
 
 | Scenario | Recommended | Why |
 |----------|:-----------:|-----|
-| Local/small models (Ollama, Qwen) | **CLI** | fewer tokens than MCP |
+| Local/small models | **CLI** | fewer tokens than MCP |
 | Cloud models (Claude, GPT) | Either | MCP gives structured JSON I/O |
 | Automated pipelines | **MCP** | type-safe parameters, audited |
 

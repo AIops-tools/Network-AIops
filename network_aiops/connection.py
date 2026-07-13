@@ -13,7 +13,7 @@ connection layer from the first version, not let users hit raw tracebacks.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from typing import Any
 
 from network_aiops.config import (
@@ -23,6 +23,11 @@ from network_aiops.config import (
     TargetConfig,
     load_config,
 )
+
+# Default NAPALM connection/command timeout (seconds). Without it a wedged
+# device can hang a session indefinitely. Merged into every driver's
+# optional_args; a user-provided value in the target's optional_args wins.
+_DEFAULT_OPTIONAL_ARGS: dict[str, Any] = {"timeout": 60}
 
 
 class NetworkApiError(Exception):
@@ -114,7 +119,7 @@ def device_session(target: TargetConfig) -> Iterator[Any]:
     and command failures are translated to ``NetworkApiError``.
     """
     driver_cls = _driver_for(target)
-    optional_args = dict(target.optional_args or {})
+    optional_args = {**_DEFAULT_OPTIONAL_ARGS, **(target.optional_args or {})}
     device = driver_cls(
         hostname=target.host,
         username=target.username,
@@ -138,7 +143,7 @@ def device_session(target: TargetConfig) -> Iterator[Any]:
             pass
 
 
-def netbox_api(netbox: NetBoxConfig | None):
+def netbox_api(netbox: NetBoxConfig | None) -> Any:
     """Return a configured pynetbox API client, or raise a teaching error.
 
     Degrades gracefully: a clear ``NetworkApiError`` when NetBox is not
@@ -191,11 +196,11 @@ class ConnectionManager:
             return self._config.get_target(target_name)
         return self._config.default_target
 
-    def session(self, target_name: str | None = None):
+    def session(self, target_name: str | None = None) -> AbstractContextManager[Any]:
         """Return a ``device_session`` context manager for a target."""
         return device_session(self.target(target_name))
 
-    def netbox(self):
+    def netbox(self) -> Any:
         """Return a pynetbox client (or raise a teaching NetworkApiError)."""
         return netbox_api(self._config.netbox)
 
