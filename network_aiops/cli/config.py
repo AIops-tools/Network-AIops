@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from mcp_server.tools import config_ops as gov
 from network_aiops.cli._common import (
     DryRunOption,
     OutputOption,
@@ -69,7 +70,7 @@ def config_merge_cmd(
         console.print(result["diff"] or "[dim](no changes)[/]")
         return
     double_confirm("merge config into", tgt.name)
-    result = config_ops.config_merge(tgt, text)
+    result = gov.config_merge(config_text=text, target=target)
     console.print(f"[green]Committed merge to {result['name']}[/]")
     console.print(result["diff"] or "[dim](no changes)[/]")
 
@@ -90,7 +91,7 @@ def config_replace_cmd(
         console.print(result["diff"] or "[dim](no changes)[/]")
         return
     double_confirm("REPLACE config of", tgt.name)
-    result = config_ops.config_replace(tgt, text)
+    result = gov.config_replace(config_text=text, target=target)
     console.print(f"[green]Committed replace to {result['name']}[/]")
     console.print(result["diff"] or "[dim](no changes)[/]")
 
@@ -107,5 +108,5 @@ def config_rollback_cmd(
         dry_run_print(operation="config_rollback", detail=f"rollback {tgt.name}")
         return
     double_confirm("rollback last commit on", tgt.name)
-    config_ops.config_rollback(tgt)
+    gov.config_rollback(target=target)
     console.print(f"[green]Rolled back the last commit on {tgt.name}[/]")

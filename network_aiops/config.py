@@ -26,6 +26,7 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
+from network_aiops.governance.paths import ops_home
 from network_aiops.secretstore import (
     NETBOX_TOKEN_NAME,
     SecretStoreError,
@@ -33,7 +34,7 @@ from network_aiops.secretstore import (
     has_store,
 )
 
-CONFIG_DIR = Path.home() / ".network-aiops"
+CONFIG_DIR = ops_home()
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 ENV_FILE = CONFIG_DIR / ".env"
 

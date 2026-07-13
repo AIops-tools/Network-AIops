@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "network-aiops"
-version = "0.2.0"
+version = "0.2.1"
 description = "Governed multi-vendor network device operations for AI agents (NAPALM) with a built-in governance harness (audit, budget, undo, risk tiers)"
 readme = "README.md"
 license = "MIT"
