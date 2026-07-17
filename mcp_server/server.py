@@ -26,6 +26,7 @@ from mcp_server.tools import (  # noqa: F401 — side effects
     inventory,
     neighbors,
     netbox,
+    undo,
 )
 
 __all__ = ["mcp", "main", "_safe_error", "tool_errors"]

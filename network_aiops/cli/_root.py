@@ -10,6 +10,7 @@ from network_aiops.cli.doctor import doctor_cmd
 from network_aiops.cli.init import init_cmd
 from network_aiops.cli.netbox import netbox_app
 from network_aiops.cli.secret import secret_app
+from network_aiops.cli.undo import undo_app
 
 app = typer.Typer(
     name="network-aiops",
@@ -21,6 +22,7 @@ app.add_typer(device_app, name="device")
 app.add_typer(config_app, name="config")
 app.add_typer(netbox_app, name="netbox")
 app.add_typer(secret_app, name="secret")
+app.add_typer(undo_app, name="undo")
 app.command("init")(init_cmd)
 app.command("doctor")(doctor_cmd)
 
