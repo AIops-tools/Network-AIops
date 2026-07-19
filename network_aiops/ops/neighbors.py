@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from network_aiops.connection import device_session
+from network_aiops.governance import opt_str
 from network_aiops.ops._shared import getter, s
 
 
@@ -31,9 +32,9 @@ def get_bgp_neighbors_detail(target: Any) -> list[dict]:
                         "neighbor": s(peer_ip, 64),
                         "remote_as": info.get("remote_as"),
                         "local_as": info.get("local_as"),
-                        "router_id": s(info.get("remote_router_id"), 64),
+                        "router_id": opt_str(info.get("remote_router_id"), 64),
                         "up": bool(info.get("up")),
-                        "connection_state": s(info.get("connection_state"), 32),
+                        "connection_state": opt_str(info.get("connection_state"), 32),
                         "received_prefixes": info.get("received_prefix_count"),
                         "accepted_prefixes": info.get("accepted_prefix_count"),
                         "advertised_prefixes": info.get("advertised_prefix_count"),
@@ -55,11 +56,11 @@ def get_lldp_neighbors_detail(target: Any) -> list[dict]:
             out.append(
                 {
                     "local_port": s(local_port, 64),
-                    "remote_chassis_id": s(n.get("remote_chassis_id"), 64),
-                    "remote_system_name": s(n.get("remote_system_name"), 128),
-                    "remote_port": s(n.get("remote_port"), 64),
-                    "remote_port_description": s(n.get("remote_port_description"), 200),
-                    "remote_system_description": s(n.get("remote_system_description"), 200),
+                    "remote_chassis_id": opt_str(n.get("remote_chassis_id"), 64),
+                    "remote_system_name": opt_str(n.get("remote_system_name"), 128),
+                    "remote_port": opt_str(n.get("remote_port"), 64),
+                    "remote_port_description": opt_str(n.get("remote_port_description"), 200),
+                    "remote_system_description": opt_str(n.get("remote_system_description"), 200),
                     "remote_system_capab": [s(c, 32) for c in (n.get("remote_system_capab") or [])],
                     "remote_system_enable_capab": [
                         s(c, 32) for c in (n.get("remote_system_enable_capab") or [])

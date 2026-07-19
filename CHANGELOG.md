@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Diagnostics / RCA (read-only, `risk_level=low`)**: two flagship analyses that
+  rank findings worst-first, each citing the measured value that tripped it —
+  `interface_health_rca` (admin-up/oper-down links, high error/discard counters,
+  recent flaps via `last_flapped`) and `bgp_neighbor_rca` (neighbors down vs
+  administratively shut, recently reset via low uptime, or up-but-route-less).
+  New CLI sub-app `network-aiops diagnose interface-health|bgp`. Tool count **28 → 30**.
+  Pure heuristics live in `network_aiops.ops.diagnostics`; `get_interfaces` and
+  `get_bgp_neighbors` now also surface `last_flapped` / `uptime`.
+
 ## v0.4.0 — 2026-07-17
 
 ### Added

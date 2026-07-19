@@ -1,5 +1,5 @@
 <!-- mcp-name: io.github.AIops-tools/network-aiops -->
-# network-aiops (preview)
+# network-aiops
 
 > **Disclaimer**: This is a community-maintained open-source project and is **not
 > affiliated with, endorsed by, or sponsored by Cisco, Arista, Juniper, NetBox
@@ -8,7 +8,7 @@
 > [github.com/AIops-tools/Network-AIops](https://github.com/AIops-tools/Network-AIops)
 > under the MIT license.
 
-Governed multi-vendor network device operations for AI agents — **28 MCP tools**,
+Governed multi-vendor network device operations for AI agents — **32 MCP tools**,
 every one wrapped with the bundled `@governed_tool` harness: a local unified audit
 log under `~/.network-aiops/`, policy engine, token/runaway budget guard,
 undo-token recording, and graduated-autonomy risk tiers. Credentials (device
@@ -20,14 +20,20 @@ NetBox block adds source-of-truth lookups.
 
 > **Standalone**: the governance harness is bundled in the package
 > (`network_aiops.governance`) — network-aiops has no external skill-family
-> dependency. Preview: common device operations, not yet exhaustive.
+> dependency. Coverage focuses on common device operations and is not yet exhaustive.
+
+> **Verification status**: the test suite is mock-based; not yet validated against live
+> devices — self-testable with cEOS / vMX / containerlab. See
+> [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
 ## What works
 
 Read device facts, interfaces (+ counters/IP), BGP/LLDP neighbors (summary and
 detail), ARP/MAC tables, VLANs, route lookups, hardware environment, optics, NTP,
-users, SNMP info, VRFs, and an aggregated `device_health`; back up the running
-config, dry-run a config diff, and merge/replace/rollback config — across the five
+users, SNMP info, VRFs, and an aggregated `device_health`; run read-only **RCA
+diagnostics** that flag down/erroring/flapping interfaces and unhealthy BGP
+neighbors — each finding citing the measured number that tripped it; back up the
+running config, dry-run a config diff, and merge/replace/rollback config — across the five
 core NAPALM platforms below. Optional NetBox lookups (devices + interfaces) confirm
 intended state before a change.
 
@@ -71,6 +77,8 @@ See [Contributing](#contributing--feature-requests).
 | SNMP info (communities redacted) | `get_snmp_information` | R | low |
 | Network instances (VRFs) | `get_network_instances` | R | low |
 | Aggregated device health | `device_health` | R | low |
+| Interface health RCA (down / errors / discards / flaps) | `interface_health_rca` | R | low |
+| BGP neighbor RCA (down / shut / reset / route-less) | `bgp_neighbor_rca` | R | low |
 | Back up running config | `config_backup` | R | low |
 | Diff a candidate (dry-run) | `config_diff` | R | low |
 | Merge config + commit | `config_merge` | W | medium |
@@ -79,6 +87,48 @@ See [Contributing](#contributing--feature-requests).
 | NetBox list devices | `netbox_list_devices` | R | low |
 | NetBox get device | `netbox_get_device` | R | low |
 | NetBox device interfaces | `netbox_device_interfaces` | R | low |
+| List recorded reversible writes | `undo_list` | R | low |
+| Apply a recorded inverse (governed, single-use, dry-run capable) | `undo_apply` | W | medium |
+
+## Security: read-only mode
+
+This tool is meant to be handed to an AI agent, so its safety story is enforced
+by the server rather than requested in a prompt:
+
+```bash
+export NETWORK_READ_ONLY=1
+```
+
+With that set, the **4 write tools are never registered**. An MCP client
+lists **28 tools instead of 32** — the writes are not hidden, not
+gated behind a flag, and not merely refused when called. They are absent from
+the session. A model cannot invoke a tool it was never offered, and cannot be
+argued into one.
+
+That distinction is the whole point. A tool that exists but refuses still invites
+retry loops and "I'll describe the call instead" behaviour from smaller models,
+and it leaves a reviewer trusting a promise. An absent tool is a fact you can
+check: connect, list the tools, and see that the writes are not there.
+
+Enforcement is two layers deep, so the switch cannot be sidestepped by changing
+entry point:
+
+| Layer | What it does | Covers |
+|---|---|---|
+| `@governed_tool` harness | refuses every non-read operation outright | MCP, CLI, and in-process callers |
+| MCP registration | write tools are removed from `list_tools()` | anything speaking MCP |
+
+Read operations are unaffected, and every call is still audited to
+`~/.network-aiops/audit.db`.
+
+> The read/write split is derived from each tool's declared `risk_level`, and a
+> test asserts that this never disagrees with the `[READ]`/`[WRITE]` tag in the
+> tool's own documentation — so a write can't quietly present itself as a read.
+
+Running a smaller / local model? See
+[agent-guardrails.md](skills/network-aiops/references/agent-guardrails.md) — it lists
+the guardrails this tool now enforces for you (so you don't spend prompt budget
+restating them) and gives a ready-made system prompt for what's left.
 
 ## Quick Start
 
@@ -88,7 +138,26 @@ network-aiops init                                  # wizard: device + driver + 
 network-aiops doctor
 network-aiops device facts -t core-sw1
 network-aiops device health -t core-sw1
+network-aiops diagnose interface-health -t core-sw1   # worst-first interface RCA
+network-aiops diagnose bgp -t core-sw1                # worst-first BGP-neighbor RCA
 network-aiops config backup -t core-sw1 -o core-sw1.cfg
+```
+
+### Playbook: triage a flaky uplink before touching config
+
+```bash
+# 1. Ask the device what's actually wrong — findings are ranked worst-first and
+#    each cites the measured value (error count, last-flap seconds, uptime).
+network-aiops diagnose interface-health -t core-sw1
+network-aiops diagnose bgp -t core-sw1
+
+# 2. If interface-health flags a link admin-up/oper-down with climbing errors and
+#    BGP shows the peer on that path recently reset, you have your root cause: a
+#    physical-layer fault (cable/optic) resetting the session — not routing.
+
+# 3. Confirm intended state, then remediate with the governed, audited path.
+network-aiops device counters -t core-sw1
+network-aiops config diff -t core-sw1 -f fix.cfg      # dry-run the change first
 ```
 
 Create `~/.network-aiops/config.yaml`:
@@ -164,7 +233,7 @@ See `skills/network-aiops/SKILL.md` and `SECURITY.md` for details.
 
 ## Contributing & feature requests
 
-This is a preview — coverage is intentionally focused. **Need a device or action
+Coverage is intentionally focused. **Need a device or action
 that isn't here yet?** Open an issue or pull request at
 [github.com/AIops-tools/Network-AIops](https://github.com/AIops-tools/Network-AIops/issues)
 — contributions, feature requests, and comments are all welcome.

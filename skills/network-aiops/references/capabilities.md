@@ -1,6 +1,6 @@
 # network-aiops Capabilities
 
-28 MCP tools (25 read / 3 write). Every tool is wrapped with `@governed_tool`
+32 MCP tools (28 read / 4 write). Every tool is wrapped with `@governed_tool`
 (audit + policy + budget + risk-tier; undo where a clean inverse exists). Returns
 are high-signal summaries — config blobs are sanitized and size-bounded. Secrets
 are never returned (user password hashes and SNMP community strings are redacted).
@@ -29,11 +29,24 @@ are never returned (user password hashes and SNMP community strings are redacted
 | `get_snmp_information` | chassis id, contact, location, community_count | low | ~40 |
 | `get_network_instances` | VRFs: name, type, RD, interfaces | low | ~40–400 |
 | `device_health` | facts + interface up/down + environment + issues | low | ~120–400 |
+| `interface_health_rca` | worst-first findings: down / error / discard / flap, each cited | low | ~80–600 |
+| `bgp_neighbor_rca` | worst-first findings: down / shut / reset / route-less, each cited | low | ~60–500 |
 | `config_backup` | running config (sanitized, size-bounded) | low | ~500–8000 |
 | `config_diff` | candidate diff (dry-run, never committed) | low | ~30–1500 |
-| `netbox_list_devices` | name, role, site, status, primary IP | low | ~40–500 |
+| `netbox_list_devices` | `{devices, returned, limit, truncated}` — name, role, site, status, primary IP | low | ~40–500 |
 | `netbox_get_device` | + device_type, serial | low | ~80 |
-| `netbox_device_interfaces` | per-interface name, type, enabled, description | low | ~40–600 |
+| `netbox_device_interfaces` | `{interfaces, returned, limit, truncated}` — name, type, enabled, description | low | ~40–600 |
+| `undo_list` | recorded, not-yet-applied reversible writes (undoId, original/inverse tool, note) | low | ~40–400 |
+
+> **Optional fields are `null`, not `""`.** Any value the driver or NetBox did
+> not return (`serial_number`, `model`, an interface `description`, an LLDP
+> `remote_host`, a NetBox `site`) comes back as JSON `null`. An empty string
+> means the field genuinely is empty. Never infer a value from `null`.
+
+> **Truncation is measured.** The two NetBox listings return an envelope with
+> `truncated`; one extra record is fetched to determine it. When `truncated` is
+> true, re-run with a higher `limit` before drawing any conclusion about
+> coverage or drift.
 
 ## Write tools
 
@@ -42,6 +55,7 @@ are never returned (user password hashes and SNMP community strings are redacted
 | `config_merge` | merge snippet + commit | medium | `config_replace` back to captured running config |
 | `config_replace` | replace full config + commit | **high** | `config_replace` back to captured running config |
 | `config_rollback` | revert last commit | medium | none (already a revert) |
+| `undo_apply` | execute a recorded inverse descriptor — itself governed, single-use, supports `dry_run` | medium | none (is the undo) |
 
 ## Per-driver support notes
 

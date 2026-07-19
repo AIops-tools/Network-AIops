@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from network_aiops.connection import device_session
+from network_aiops.governance import opt_str
 from network_aiops.ops._shared import getter, s
 
 
@@ -45,8 +46,8 @@ def get_mac_address_table(target: Any) -> list[dict]:
         entry = entry or {}
         out.append(
             {
-                "mac": s(entry.get("mac"), 32),
-                "interface": s(entry.get("interface"), 64),
+                "mac": opt_str(entry.get("mac"), 32),
+                "interface": opt_str(entry.get("interface"), 64),
                 "vlan": entry.get("vlan"),
                 "static": bool(entry.get("static")),
                 "active": bool(entry.get("active")),
@@ -67,7 +68,7 @@ def get_vlans(target: Any) -> list[dict]:
         out.append(
             {
                 "vlan_id": s(vlan_id, 16),
-                "name": s(info.get("name"), 128),
+                "name": opt_str(info.get("name"), 128),
                 "interfaces": [s(i, 64) for i in (info.get("interfaces") or [])],
             }
         )
@@ -87,10 +88,10 @@ def get_route_to(target: Any, destination: str, protocol: str = "") -> list[dict
             out.append(
                 {
                     "prefix": s(prefix, 64),
-                    "protocol": s(r.get("protocol"), 32),
+                    "protocol": opt_str(r.get("protocol"), 32),
                     "current_active": bool(r.get("current_active")),
-                    "next_hop": s(r.get("next_hop"), 64),
-                    "outgoing_interface": s(r.get("outgoing_interface"), 64),
+                    "next_hop": opt_str(r.get("next_hop"), 64),
+                    "outgoing_interface": opt_str(r.get("outgoing_interface"), 64),
                     "preference": r.get("preference"),
                     "selected_next_hop": bool(r.get("selected_next_hop")),
                 }

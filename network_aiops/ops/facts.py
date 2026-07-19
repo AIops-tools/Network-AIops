@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from network_aiops.connection import device_session
+from network_aiops.governance import opt_str
 from network_aiops.ops._shared import getter, s
 
 
@@ -23,12 +24,12 @@ def device_facts(target: Any) -> dict:
         f = getter(target.driver, "get_facts", dev.get_facts)
     return {
         "name": s(target.name, 128),
-        "hostname": s(f.get("hostname"), 128),
-        "fqdn": s(f.get("fqdn"), 200),
-        "vendor": s(f.get("vendor"), 64),
-        "model": s(f.get("model"), 128),
-        "os_version": s(f.get("os_version"), 200),
-        "serial_number": s(f.get("serial_number"), 128),
+        "hostname": opt_str(f.get("hostname"), 128),
+        "fqdn": opt_str(f.get("fqdn"), 200),
+        "vendor": opt_str(f.get("vendor"), 64),
+        "model": opt_str(f.get("model"), 128),
+        "os_version": opt_str(f.get("os_version"), 200),
+        "serial_number": opt_str(f.get("serial_number"), 128),
         "uptime_seconds": int(f.get("uptime") or 0),
         "interface_count": len(f.get("interface_list") or []),
         "interfaces": [s(i, 64) for i in (f.get("interface_list") or [])],
@@ -47,8 +48,9 @@ def get_interfaces(target: Any) -> list[dict]:
                 "is_up": bool(iface.get("is_up")),
                 "is_enabled": bool(iface.get("is_enabled")),
                 "speed": iface.get("speed"),
-                "description": s(iface.get("description"), 200),
-                "mac_address": s(iface.get("mac_address"), 32),
+                "description": opt_str(iface.get("description"), 200),
+                "mac_address": opt_str(iface.get("mac_address"), 32),
+                "last_flapped": iface.get("last_flapped"),
             }
         )
     return out
@@ -89,6 +91,7 @@ def get_bgp_neighbors(target: Any) -> list[dict]:
                     "remote_as": (info or {}).get("remote_as"),
                     "is_up": bool((info or {}).get("is_up")),
                     "is_enabled": bool((info or {}).get("is_enabled")),
+                    "uptime": (info or {}).get("uptime"),
                     "received_prefixes": ipv4.get("received_prefixes"),
                     "accepted_prefixes": ipv4.get("accepted_prefixes"),
                 }
@@ -106,8 +109,8 @@ def get_lldp_neighbors(target: Any) -> list[dict]:
             out.append(
                 {
                     "local_port": s(local_port, 64),
-                    "remote_host": s((n or {}).get("hostname"), 128),
-                    "remote_port": s((n or {}).get("port"), 64),
+                    "remote_host": opt_str((n or {}).get("hostname"), 128),
+                    "remote_port": opt_str((n or {}).get("port"), 64),
                 }
             )
     return out
@@ -121,9 +124,9 @@ def get_arp_table(target: Any) -> list[dict]:
     for entry in data or []:
         out.append(
             {
-                "interface": s((entry or {}).get("interface"), 64),
-                "ip": s((entry or {}).get("ip"), 64),
-                "mac": s((entry or {}).get("mac"), 32),
+                "interface": opt_str((entry or {}).get("interface"), 64),
+                "ip": opt_str((entry or {}).get("ip"), 64),
+                "mac": opt_str((entry or {}).get("mac"), 32),
                 "age": (entry or {}).get("age"),
             }
         )

@@ -27,6 +27,8 @@ EXPECTED_TOOLS = {
     "get_users", "get_snmp_information", "get_network_instances",
     # health (read)
     "device_health",
+    # diagnostics / RCA (read)
+    "interface_health_rca", "bgp_neighbor_rca",
     # config (read)
     "config_backup", "config_diff",
     # config (write)
@@ -52,12 +54,14 @@ def test_all_modules_import():
         "network_aiops.ops.inventory",
         "network_aiops.ops.environment",
         "network_aiops.ops.health",
+        "network_aiops.ops.diagnostics",
         "network_aiops.ops.config_ops",
         "network_aiops.ops.netbox_ops",
         "network_aiops.cli",
         "network_aiops.cli._root",
         "network_aiops.cli._common",
         "network_aiops.cli.device",
+        "network_aiops.cli.diagnostics",
         "network_aiops.cli.config",
         "network_aiops.cli.netbox",
         "network_aiops.cli.secret",
@@ -70,6 +74,7 @@ def test_all_modules_import():
         "mcp_server.tools.inventory",
         "mcp_server.tools.environment",
         "mcp_server.tools.health",
+        "mcp_server.tools.diagnostics",
         "mcp_server.tools.config_ops",
         "mcp_server.tools.netbox",
     ):
@@ -97,7 +102,7 @@ def test_cli_app_builds_and_help_works():
     runner = CliRunner()
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for sub in ("device", "config", "netbox", "secret", "init", "doctor", "mcp"):
+    for sub in ("device", "diagnose", "config", "netbox", "secret", "init", "doctor", "mcp"):
         assert sub in result.output
 
 
@@ -108,12 +113,14 @@ def test_cli_leaf_help_triggers_lazy_imports():
 
     runner = CliRunner()
     for cmd in (
-        ["device", "--help"], ["config", "--help"], ["netbox", "--help"],
-        ["secret", "--help"], ["init", "--help"], ["doctor", "--help"],
+        ["device", "--help"], ["diagnose", "--help"], ["config", "--help"],
+        ["netbox", "--help"], ["secret", "--help"], ["init", "--help"],
+        ["doctor", "--help"],
     ):
         result = runner.invoke(app, cmd)
         assert result.exit_code == 0, f"{cmd} failed: {result.output}"
     for cmd in (
+        ["diagnose", "interface-health", "--help"], ["diagnose", "bgp", "--help"],
         ["device", "facts", "--help"], ["device", "interfaces", "--help"],
         ["device", "bgp", "--help"], ["device", "lldp", "--help"],
         ["device", "arp", "--help"], ["device", "counters", "--help"],
@@ -149,6 +156,9 @@ def test_every_mcp_tool_is_governed_by_harness():
 
     tool_objs = _shared.mcp._tool_manager._tools
     assert EXPECTED_TOOLS <= set(tool_objs), "tool registry incomplete"
+    assert len(tool_objs) == 32, (
+        "tool count changed — update README/SKILL/server.json too"
+    )
     for name, tool in tool_objs.items():
         fn = getattr(tool, "fn", None)
         assert fn is not None, f"{name} has no fn"
@@ -599,9 +609,10 @@ def test_netbox_ops_with_mocked_pynetbox():
 
     api = MagicMock()
     api.dcim.devices.filter.return_value = [dev]
-    rows = ops.netbox_list_devices(api, name="edge")
-    assert rows[0]["name"] == "edge-1"
-    assert rows[0]["site"] == "dc1"
+    result = ops.netbox_list_devices(api, name="edge")
+    assert result["devices"][0]["name"] == "edge-1"
+    assert result["devices"][0]["site"] == "dc1"
+    assert result["truncated"] is False
 
     api.dcim.devices.get.return_value = None
     miss = ops.netbox_get_device(api, "nope")
@@ -614,7 +625,7 @@ def test_netbox_ops_with_mocked_pynetbox():
     iface.description = "uplink"
     iface.mac_address = "00:11:22:33:44:55"
     api.dcim.interfaces.filter.return_value = [iface]
-    ifaces = ops.netbox_device_interfaces(api, "edge-1")
+    ifaces = ops.netbox_device_interfaces(api, "edge-1")["interfaces"]
     assert ifaces[0]["name"] == "Ethernet1"
     assert ifaces[0]["enabled"] is True
 

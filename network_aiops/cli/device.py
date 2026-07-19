@@ -21,12 +21,22 @@ def _resolve(target: str | None):
     return mgr.target(target)
 
 
+def _cell(value: object) -> str:
+    """Render one cell, keeping "absent" visually distinct from a literal value.
+
+    An optional field the device never returned is ``None`` at the ops layer.
+    Stringifying it would print the word ``None``, which reads like data; an
+    em dash reads like "not reported", which is what it is.
+    """
+    return "—" if value is None else str(value)
+
+
 def _simple_table(title: str, columns: tuple[str, ...], rows: list[dict]) -> None:
     table = Table(title=title)
     for col in columns:
         table.add_column(col)
     for r in rows:
-        table.add_row(*[str(r.get(c)) for c in columns])
+        table.add_row(*[_cell(r.get(c)) for c in columns])
     console.print(table)
 
 
@@ -37,7 +47,7 @@ def device_facts_cmd(target: TargetOption = None) -> None:
     result = facts.device_facts(_resolve(target))
     for k in ("name", "hostname", "vendor", "model", "os_version",
               "serial_number", "uptime_seconds", "interface_count"):
-        console.print(f"  [cyan]{k}:[/] {result.get(k)}")
+        console.print(f"  [cyan]{k}:[/] {_cell(result.get(k))}")
 
 
 @device_app.command("interfaces")
@@ -50,8 +60,8 @@ def device_interfaces_cmd(target: TargetOption = None) -> None:
         table.add_column(col)
     for r in rows:
         table.add_row(
-            r["interface"], str(r["is_up"]), str(r["is_enabled"]),
-            str(r["speed"]), r["description"],
+            _cell(r["interface"]), str(r["is_up"]), str(r["is_enabled"]),
+            _cell(r["speed"]), _cell(r["description"]),
         )
     console.print(table)
 
@@ -66,8 +76,8 @@ def device_bgp_cmd(target: TargetOption = None) -> None:
         table.add_column(col)
     for r in rows:
         table.add_row(
-            r["vrf"], r["neighbor"], str(r["remote_as"]),
-            str(r["is_up"]), str(r["received_prefixes"]),
+            _cell(r["vrf"]), _cell(r["neighbor"]), _cell(r["remote_as"]),
+            str(r["is_up"]), _cell(r["received_prefixes"]),
         )
     console.print(table)
 
@@ -81,7 +91,7 @@ def device_lldp_cmd(target: TargetOption = None) -> None:
     for col in ("local_port", "remote_host", "remote_port"):
         table.add_column(col)
     for r in rows:
-        table.add_row(r["local_port"], r["remote_host"], r["remote_port"])
+        table.add_row(_cell(r["local_port"]), _cell(r["remote_host"]), _cell(r["remote_port"]))
     console.print(table)
 
 
@@ -94,7 +104,7 @@ def device_arp_cmd(target: TargetOption = None) -> None:
     for col in ("interface", "ip", "mac", "age"):
         table.add_column(col)
     for r in rows:
-        table.add_row(r["interface"], r["ip"], r["mac"], str(r["age"]))
+        table.add_row(_cell(r["interface"]), _cell(r["ip"]), _cell(r["mac"]), _cell(r["age"]))
     console.print(table)
 
 
@@ -127,7 +137,7 @@ def device_vlans_cmd(target: TargetOption = None) -> None:
     for col in ("vlan_id", "name", "interfaces"):
         table.add_column(col)
     for r in rows:
-        table.add_row(r["vlan_id"], r["name"], str(len(r["interfaces"])))
+        table.add_row(_cell(r["vlan_id"]), _cell(r["name"]), str(len(r["interfaces"])))
     console.print(table)
 
 
@@ -166,7 +176,9 @@ def device_health_cmd(target: TargetOption = None) -> None:
     """Show an aggregated health summary (facts + interfaces + environment)."""
     h = health_ops.device_health(_resolve(target))
     status = "[green]HEALTHY[/]" if h["healthy"] else "[red]ISSUES[/]"
-    console.print(f"[bold]{h['name']} ({h['hostname']}, {h['model']})[/] — {status}")
+    console.print(
+        f"[bold]{h['name']} ({_cell(h['hostname'])}, {_cell(h['model'])})[/] — {status}"
+    )
     console.print(f"  interfaces: {h['interfaces']}")
     if h["environment"]:
         console.print(f"  environment: {h['environment']}")

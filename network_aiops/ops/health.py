@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from network_aiops.connection import NetworkApiError, device_session
+from network_aiops.governance import opt_str
 from network_aiops.ops._shared import getter, s
 
 
@@ -85,9 +86,9 @@ def device_health(target: Any) -> dict:
 
     return {
         "name": s(target.name, 128),
-        "hostname": s(facts.get("hostname"), 128),
-        "model": s(facts.get("model"), 128),
-        "os_version": s(facts.get("os_version"), 200),
+        "hostname": opt_str(facts.get("hostname"), 128),
+        "model": opt_str(facts.get("model"), 128),
+        "os_version": opt_str(facts.get("os_version"), 200),
         "uptime_seconds": int(facts.get("uptime") or 0),
         "interfaces": interfaces,
         "environment": environment,

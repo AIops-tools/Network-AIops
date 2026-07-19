@@ -13,12 +13,16 @@ from network_aiops.ops import netbox_ops as ops
 
 @mcp.tool()
 @governed_tool(risk_level="low")
-@tool_errors("list")
-def netbox_list_devices(name: Optional[str] = None, limit: int = 50) -> list:
+@tool_errors("dict")
+def netbox_list_devices(name: Optional[str] = None, limit: int = 50) -> dict:
     """[READ] List NetBox devices (name, role, site, status, primary IP).
 
     Requires a configured NetBox block. Use this to confirm intended state
     before pushing config to a device.
+
+    Returns ``{"devices": [...], "returned": N, "limit": L, "truncated": bool}``.
+    When ``truncated`` is true the estate is larger than what you were shown —
+    re-run with a higher ``limit`` before concluding anything about coverage.
 
     Args:
         name: Optional name filter (contains match).
@@ -41,12 +45,15 @@ def netbox_get_device(name: str) -> dict:
 
 @mcp.tool()
 @governed_tool(risk_level="low")
-@tool_errors("list")
-def netbox_device_interfaces(device: str, limit: int = 100) -> list:
+@tool_errors("dict")
+def netbox_device_interfaces(device: str, limit: int = 100) -> dict:
     """[READ] List a NetBox device's interfaces (name, type, enabled, description).
 
     The intended interface inventory from source-of-truth — compare against live
     device state (get_interfaces) to spot drift.
+
+    Returns ``{"interfaces": [...], "returned": N, "limit": L, "truncated": bool}``.
+    Do NOT report drift from a truncated list — re-run with a higher ``limit``.
 
     Args:
         device: Exact NetBox device name (see netbox_list_devices).

@@ -149,9 +149,13 @@ def test_governed_netbox_list_devices(gov_home, netbox_api):
     dev.primary_ip.address = "10.0.0.5/32"
     netbox_api.dcim.devices.filter.return_value = [dev]
 
-    rows = netbox_tools.netbox_list_devices(name="edge", limit=10)
-    netbox_api.dcim.devices.filter.assert_called_once_with(limit=10, name__ic="edge")
-    assert rows[0]["name"] == "edge-1"
+    result = netbox_tools.netbox_list_devices(name="edge", limit=10)
+    # limit + 1 is requested so "truncated" is measured, not guessed
+    netbox_api.dcim.devices.filter.assert_called_once_with(limit=11, name__ic="edge")
+    assert result["devices"][0]["name"] == "edge-1"
+    assert result["returned"] == 1
+    assert result["limit"] == 10
+    assert result["truncated"] is False
 
 
 @pytest.mark.unit
@@ -171,9 +175,10 @@ def test_governed_netbox_device_interfaces(gov_home, netbox_api):
     iface.mac_address = "00:11:22:33:44:55"
     netbox_api.dcim.interfaces.filter.return_value = [iface]
 
-    rows = netbox_tools.netbox_device_interfaces(device="edge-1", limit=25)
-    netbox_api.dcim.interfaces.filter.assert_called_once_with(device="edge-1", limit=25)
-    assert rows[0]["name"] == "Ethernet1"
+    result = netbox_tools.netbox_device_interfaces(device="edge-1", limit=25)
+    netbox_api.dcim.interfaces.filter.assert_called_once_with(device="edge-1", limit=26)
+    assert result["interfaces"][0]["name"] == "Ethernet1"
+    assert result["truncated"] is False
 
 
 @pytest.mark.unit

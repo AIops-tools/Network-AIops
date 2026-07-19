@@ -77,12 +77,14 @@ def tool_errors(shape: str = "dict") -> Callable:
 mcp = FastMCP(
     "network-aiops",
     instructions=(
-        "Governed multi-vendor network device operations (preview) over NAPALM. "
+        "Governed multi-vendor network device operations over NAPALM. "
         f"Officially supported drivers: {_SUPPORTED} (Cisco IOS/IOS-XE, Nexus "
         "NX-OS, IOS-XR, Arista EOS, Juniper Junos). Read tools: device facts, "
         "interfaces (+ counters / IP), BGP & LLDP neighbors (summary + detail), "
         "ARP & MAC tables, VLANs, route lookup, environment (fans/temp/power/"
         "CPU/mem), optics, NTP, users, SNMP info, VRFs, an aggregated device_health, "
+        "read-only RCA diagnostics (interface_health_rca, bgp_neighbor_rca — each "
+        "finding cites the measured value, worst-first), "
         "config backup, and config diff (dry-run). Write tools: config merge, "
         "config replace, config rollback. An optional NetBox block adds "
         "source-of-truth device + interface lookups. Many getters are not "

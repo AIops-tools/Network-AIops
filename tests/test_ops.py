@@ -165,7 +165,7 @@ def test_netbox_list_devices_passes_limit_and_name_filter():
     api = MagicMock()
     api.dcim.devices.filter.return_value = []
     netbox_ops.netbox_list_devices(api, limit=10, name="edge")
-    api.dcim.devices.filter.assert_called_once_with(limit=10, name__ic="edge")
+    api.dcim.devices.filter.assert_called_once_with(limit=11, name__ic="edge")
 
 
 @pytest.mark.unit
@@ -173,7 +173,7 @@ def test_netbox_device_interfaces_filters_by_device():
     api = MagicMock()
     api.dcim.interfaces.filter.return_value = []
     netbox_ops.netbox_device_interfaces(api, "edge-1", limit=25)
-    api.dcim.interfaces.filter.assert_called_once_with(device="edge-1", limit=25)
+    api.dcim.interfaces.filter.assert_called_once_with(device="edge-1", limit=26)
 
 
 @pytest.mark.unit

@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from network_aiops.connection import device_session
+from network_aiops.governance import opt_str
 from network_aiops.ops._shared import getter, s
 
 
@@ -94,10 +95,10 @@ def get_ntp_stats(target: Any) -> list[dict]:
         entry = entry or {}
         out.append(
             {
-                "remote": s(entry.get("remote"), 64),
+                "remote": opt_str(entry.get("remote"), 64),
                 "synchronized": bool(entry.get("synchronized")),
                 "stratum": entry.get("stratum"),
-                "type": s(entry.get("type"), 16),
+                "type": opt_str(entry.get("type"), 16),
                 "reachability": entry.get("reachability"),
                 "delay": entry.get("delay"),
                 "offset": entry.get("offset"),
@@ -133,9 +134,9 @@ def get_snmp_information(target: Any) -> dict:
     communities = data.get("community") or {}
     return {
         "name": s(target.name, 128),
-        "chassis_id": s(data.get("chassis_id"), 128),
-        "contact": s(data.get("contact"), 200),
-        "location": s(data.get("location"), 200),
+        "chassis_id": opt_str(data.get("chassis_id"), 128),
+        "contact": opt_str(data.get("contact"), 200),
+        "location": opt_str(data.get("location"), 200),
         "community_count": len(communities),  # values redacted (secrets)
     }
 
@@ -152,8 +153,8 @@ def get_network_instances(target: Any) -> list[dict]:
         out.append(
             {
                 "name": s(name, 64),
-                "type": s(state.get("type") or info.get("type"), 64),
-                "route_distinguisher": s(state.get("route_distinguisher"), 64),
+                "type": opt_str(state.get("type") or info.get("type"), 64),
+                "route_distinguisher": opt_str(state.get("route_distinguisher"), 64),
                 "interfaces": [s(i, 64) for i in interfaces],
             }
         )

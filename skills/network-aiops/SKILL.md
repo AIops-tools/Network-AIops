@@ -1,10 +1,16 @@
 ---
 name: network-aiops
+slug: network-aiops
+displayName: "Network AIops"
+summary: "Governed network device ops (NAPALM) — 32 MCP tools with audit/undo."
+license: MIT
+homepage: https://github.com/AIops-tools/Network-AIops
+tags: [aiops, mcp, governance, network]
 description: >
-  Use this skill whenever the user needs to operate a network device — read device facts, interfaces (+ counters/IP), BGP/LLDP neighbors (summary and detail), ARP/MAC tables, VLANs, routes, hardware environment (fans/temp/power/CPU/mem), optics, NTP, users, SNMP info, VRFs, and an aggregated device-health summary; back up a switch/router config, diff a candidate config (dry-run), and merge/replace/rollback config — across Cisco IOS/IOS-XE, Nexus NX-OS, IOS-XR, Arista EOS, and Juniper Junos via NAPALM. An optional NetBox block adds source-of-truth lookups.
+  Use this skill whenever the user needs to operate a network device — read device facts, interfaces (+ counters/IP), BGP/LLDP neighbors (summary and detail), ARP/MAC tables, VLANs, routes, hardware environment (fans/temp/power/CPU/mem), optics, NTP, users, SNMP info, VRFs, and an aggregated device-health summary; run read-only RCA diagnostics on interface health and BGP neighbors; back up a switch/router config, diff a candidate config (dry-run), and merge/replace/rollback config — across Cisco IOS/IOS-XE, Nexus NX-OS, IOS-XR, Arista EOS, and Juniper Junos via NAPALM. An optional NetBox block adds source-of-truth lookups.
   Always use this skill for "back up switch config", "show bgp neighbors", "diff network config", "push config to router", "show interfaces on the switch", or tasks mentioning "cisco", "arista", "juniper", "nexus", "ios-xr", or "napalm".
   Do NOT use when the target is not a NAPALM-supported network device (Kubernetes clusters, hypervisor VMs, and cloud consoles are out of scope — route those elsewhere).
-  Preview — common multi-vendor device operations with a built-in governance harness (audit, policy, token budget, undo, risk-tiers).
+  Common multi-vendor device operations with a built-in governance harness (audit, policy, token budget, undo, risk-tiers).
 installer:
   kind: uv
   package: network-aiops
@@ -13,7 +19,7 @@ allowed-tools:
   - Bash
 metadata: {"openclaw":{"requires":{"env":["NETWORK_AIOPS_CONFIG"],"bins":["network-aiops"],"config":["~/.network-aiops/config.yaml"]},"optional":{"env":["NETWORK_AIOPS_HOME","NETWORK_AIOPS_MASTER_PASSWORD","NETWORK_NETBOX_TOKEN"]},"primaryEnv":"NETWORK_AIOPS_CONFIG","homepage":"https://github.com/AIops-tools/Network-AIops","emoji":"🛜","os":["macos","linux"]}}
 compatibility: >
-  Standalone, self-governed network device operations (preview) over NAPALM. The governance harness (audit, policy, token/runaway budget, undo, risk-tiers) is bundled in the package — no external skill-family dependency.
+  Standalone, self-governed network device operations over NAPALM. The governance harness (audit, policy, token/runaway budget, undo, risk-tiers) is bundled in the package — no external skill-family dependency.
   All write operations are audited to a local SQLite DB under ~/.network-aiops/ (relocatable via NETWORK_AIOPS_HOME).
   Credentials: device login passwords AND the optional NetBox API token live in an ENCRYPTED store at ~/.network-aiops/secrets.enc (Fernet/AES + scrypt-derived key; chmod 600), never in plaintext. Device passwords are keyed by the device name; the NetBox token uses the reserved name "netbox-token". Unlock with the NETWORK_AIOPS_MASTER_PASSWORD env var (for the MCP server / non-interactive use) or an interactive prompt. Run `network-aiops init` (wizard) or `network-aiops secret set <name>` to populate it, and `network-aiops secret migrate` to import a legacy plaintext .env (NETWORK_<TARGET_UPPER>_PASSWORD / NETWORK_NETBOX_TOKEN are still honoured as a deprecated fallback). config.yaml holds only device names, drivers, hosts, usernames, and NAPALM optional_args — never secrets. The state dir ~/.network-aiops should be chmod 700.
   Destructive operations (config merge, config replace, config rollback) require double confirmation at the CLI layer and support --dry-run (which prints the diff without committing). All write tools pass through the @governed_tool decorator (pre-check + budget guard + audit + risk-tier gate). config_merge and config_replace capture the pre-change running config and record an inverse config_replace-to-backup undo descriptor; config_rollback records none, and config_replace is risk_level=high.
@@ -22,13 +28,13 @@ compatibility: >
   Transitive dependencies: napalm (device drivers), pynetbox (optional source-of-truth), typer/rich (CLI), pyyaml/python-dotenv (config), and the MCP SDK. No post-install scripts or background services.
 ---
 
-# Network AIops (preview)
+# Network AIops
 
 > **Disclaimer**: This is a community-maintained open-source project and is **not affiliated with, endorsed by, or sponsored by Cisco, Arista, Juniper, NetBox Labs, or any network vendor.** Vendor and product names are trademarks of their respective owners. Source code is publicly auditable at [github.com/AIops-tools/Network-AIops](https://github.com/AIops-tools/Network-AIops) under the MIT license.
 
-Governed multi-vendor network device operations — **28 MCP tools**, every one wrapped with the bundled `@governed_tool` harness: a local unified audit log under `~/.network-aiops/`, policy engine, token/runaway budget guard, undo-token recording, and graduated-autonomy risk tiers. Devices are reached over NAPALM; an optional NetBox block adds source-of-truth lookups. Secrets (device passwords + NetBox token) are kept in an **encrypted store** (`secrets.enc`), unlocked by `NETWORK_AIOPS_MASTER_PASSWORD`.
+Governed multi-vendor network device operations — **32 MCP tools**, every one wrapped with the bundled `@governed_tool` harness: a local unified audit log under `~/.network-aiops/`, policy engine, token/runaway budget guard, undo-token recording, and graduated-autonomy risk tiers. Devices are reached over NAPALM; an optional NetBox block adds source-of-truth lookups. Secrets (device passwords + NetBox token) are kept in an **encrypted store** (`secrets.enc`), unlocked by `NETWORK_AIOPS_MASTER_PASSWORD`.
 
-> **Standalone**: the governance harness is bundled in the package (`network_aiops.governance`) — network-aiops has no external skill-family dependency. Preview: common operations, not yet exhaustive.
+> **Standalone**: the governance harness is bundled in the package (`network_aiops.governance`) — network-aiops has no external skill-family dependency. Coverage focuses on common operations and is not yet exhaustive.
 
 ## What This Skill Does
 
@@ -37,8 +43,10 @@ Governed multi-vendor network device operations — **28 MCP tools**, every one 
 | **Device facts** | facts, interfaces, interface counters, interface IPs, BGP (+detail), LLDP (+detail), ARP | 9 | 9 read |
 | **Inventory** | MAC table, VLANs, route lookup | 3 | 3 read |
 | **Platform / env** | environment, optics, NTP servers, NTP stats, users, SNMP info, VRFs, device_health | 8 | 8 read |
+| **Diagnostics / RCA** | interface_health_rca, bgp_neighbor_rca | 2 | 2 read |
 | **Config** | backup, diff (dry-run), merge, replace, rollback | 5 | 2 read / 3 write |
 | **NetBox** | list devices, get device, device interfaces | 3 | 3 read |
+| **Undo** | undo_list, undo_apply | 2 | 1 read / 1 write |
 
 ## Quick Install
 
@@ -66,6 +74,7 @@ Other platforms (Nokia SR OS / SR Linux, Huawei VRP, etc.) are reachable via NAP
 
 - Inspect device facts, interfaces (+ counters/IP), BGP/LLDP neighbors (summary + detail), ARP/MAC tables, VLANs, and route lookups
 - Check hardware health: environment (fans/temp/power/CPU/mem), optics, NTP, users, SNMP info, VRFs, or a one-shot `device_health` summary
+- Root-cause a problem with read-only RCA: `interface_health_rca` (down/erroring/discarding/flapping ports) and `bgp_neighbor_rca` (down/shut/recently-reset/route-less peers) — each finding cites the measured number that tripped it, worst-first
 - Back up a switch/router running config to a file
 - Dry-run a config change as a diff before committing
 - Merge a config snippet, replace the full config, or roll back the last commit
@@ -105,6 +114,8 @@ Other platforms (Nokia SR OS / SR Linux, Huawei VRP, etc.) are reachable via NAP
 | `get_snmp_information` | R | low | all 5 (community strings redacted) |
 | `get_network_instances` | R | low | eos/junos/iosxr; ios/nxos varies |
 | `device_health` | R | low | all 5 (environment section optional) |
+| `interface_health_rca` | R | low | all 5 (needs get_interfaces + counters) |
+| `bgp_neighbor_rca` | R | low | all 5 (varies by BGP feature) |
 | `config_backup` | R | low | all 5 |
 | `config_diff` (dry-run) | R | low | all 5 |
 | `config_merge` | W | medium | all 5 |
@@ -126,12 +137,13 @@ Other platforms (Nokia SR OS / SR Linux, Huawei VRP, etc.) are reachable via NAP
 4. `network-aiops device interfaces -t core-sw1` → verify the result
 5. **Failure branch**: if the connection fails (`Could not connect/authenticate`), run `network-aiops doctor` — it shows whether `NETWORK_CORE_SW1_PASSWORD` is set and whether the host/port is reachable; the skill never retries a denied auth.
 
-### Diagnose a BGP/peering problem
+### Root-cause a flaky uplink / peering problem (RCA-first)
 
-1. `network-aiops device bgp -t edge-rtr` → find the down neighbor (`is_up=False`)
-2. `network-aiops device interfaces -t edge-rtr` → confirm the uplink is up
-3. `network-aiops device arp -t edge-rtr` → confirm L2/L3 reachability to the peer
-4. **Failure branch**: if `get_bgp_neighbors` returns "not supported by the `<driver>` driver", the platform's NAPALM driver lacks that getter — fall back to `config_backup` and inspect the BGP stanza, and request the getter via a GitHub issue.
+1. `network-aiops diagnose interface-health -t edge-rtr` → worst-first interface findings; a link that is admin-up/oper-down with climbing `rx_errors+tx_errors` and a recent `last_flapped` is a physical-layer fault (cable/optic), each cited with its measured value
+2. `network-aiops diagnose bgp -t edge-rtr` → worst-first neighbor findings; if the peer riding that link shows `BGP session down` or `recently reset` (low uptime), the L1 fault — not routing — is resetting the session
+3. `network-aiops device counters -t edge-rtr` → confirm the error counters are still climbing before you touch anything
+4. `network-aiops config diff fix.cfg -t edge-rtr` → dry-run the remediation first, then `config merge` (double confirm) through the audited path
+5. **Failure branch**: if `interface_health_rca` / `bgp_neighbor_rca` returns "not supported by the `<driver>` driver", the platform's NAPALM driver lacks the underlying getter — fall back to `device facts` / `config_backup` and request the getter via a GitHub issue.
 
 ## Usage Mode
 
@@ -141,18 +153,21 @@ Other platforms (Nokia SR OS / SR Linux, Huawei VRP, etc.) are reachable via NAP
 | Cloud models (Claude, GPT) | Either | MCP gives structured JSON I/O |
 | Automated pipelines | **MCP** | type-safe parameters, audited |
 
-## MCP Tools (28 — 25 read, 3 write)
+## MCP Tools (32 — 28 read, 4 write)
 
 | Category | Tools | R/W |
 |----------|-------|:---:|
 | Facts | `device_facts`, `get_interfaces`, `get_interfaces_counters`, `get_interfaces_ip`, `get_bgp_neighbors`, `get_bgp_neighbors_detail`, `get_lldp_neighbors`, `get_lldp_neighbors_detail`, `get_arp_table` | Read |
 | Inventory | `get_mac_address_table`, `get_vlans`, `get_route_to` | Read |
 | Platform / env | `get_environment`, `get_optics`, `get_ntp_servers`, `get_ntp_stats`, `get_users`, `get_snmp_information`, `get_network_instances`, `device_health` | Read |
+| Diagnostics / RCA | `interface_health_rca`, `bgp_neighbor_rca` | Read |
 | Config | `config_backup`, `config_diff` | Read |
 | | `config_merge`, `config_replace`, `config_rollback` | Write |
 | NetBox | `netbox_list_devices`, `netbox_get_device`, `netbox_device_interfaces` | Read |
+| Undo | `undo_list` | Read |
+| | `undo_apply` | Write |
 
-**Harness features that light up**: `config_merge` and `config_replace` capture the pre-change running config and pass an `undo=` lambda so the harness records an inverse descriptor (with `_undo_id`) that restores the captured config via `config_replace` — the device must support config replace for the undo to apply. `config_rollback` declares no undo; `config_replace` is tagged `risk_level=high`. `config_diff` is a pure dry-run (stage candidate → compare → discard). All 28 tools are audit-logged under `~/.network-aiops/` and pass through the policy pre-check + budget/runaway guard + graduated risk-tier gate. Avoid tight poll loops — the runaway breaker backs this up.
+**Harness features that light up**: `config_merge` and `config_replace` capture the pre-change running config and pass an `undo=` lambda so the harness records an inverse descriptor (with `_undo_id`) that restores the captured config via `config_replace` — the device must support config replace for the undo to apply. `config_rollback` declares no undo; `config_replace` is tagged `risk_level=high`. `config_diff` is a pure dry-run (stage candidate → compare → discard). The two RCA tools (`interface_health_rca`, `bgp_neighbor_rca`) are pure read-only analyses (`risk_level=low`) that collect getter output and rank findings worst-first. All 32 tools are audit-logged under `~/.network-aiops/` and pass through the policy pre-check + budget/runaway guard + graduated risk-tier gate. Avoid tight poll loops — the runaway breaker backs this up.
 
 ## Encrypted secret store
 
@@ -185,6 +200,8 @@ network-aiops device vlans [-t <device>]
 network-aiops device route <prefix> [-t <device>] [--protocol bgp]
 network-aiops device environment [-t <device>]
 network-aiops device health [-t <device>]
+network-aiops diagnose interface-health [-t <device>]           # interface RCA (worst-first)
+network-aiops diagnose bgp [-t <device>]                        # BGP-neighbor RCA (worst-first)
 network-aiops config backup [-t <device>] [-o <file>]
 network-aiops config diff <file> [-t <device>] [--replace]
 network-aiops config merge <file> [-t <device>] [--dry-run]      # double confirm
@@ -230,11 +247,15 @@ All operations are automatically audited via the bundled `@governed_tool` decora
 - Undo store records inverse descriptors for reversible writes (config merge/replace → restore captured running config)
 - Graduated-autonomy risk tiers gate write operations (require a recorded approver for the highest tiers)
 
+- **Read-only mode**: `NETWORK_READ_ONLY=1` unregisters the four write tools (`config_merge`, `config_replace`, `config_rollback`, `undo_apply`) — 32 tools become 28 and the harness refuses non-read calls independently, so the CLI is covered too.
+
 The harness is bundled in the package — no external dependency, no manual setup. See `references/setup-guide.md` for security details.
+
+Driving these tools with a smaller / local model? See `references/agent-guardrails.md` — which guardrails the harness now enforces for you, a ready-to-paste system prompt, and the network-specific traps (config merge vs replace, per-vendor interface naming, NetBox intent vs live device state).
 
 ## Contributing — request a device or feature
 
-This is a preview — coverage is intentionally focused. **Need a device (Nokia SR OS, Huawei VRP, …) or an action that isn't here yet?** Open an issue or pull request at [github.com/AIops-tools/Network-AIops](https://github.com/AIops-tools/Network-AIops/issues) — feature requests, contributions, and comments are all welcome.
+Coverage is intentionally focused. **Need a device (Nokia SR OS, Huawei VRP, …) or an action that isn't here yet?** Open an issue or pull request at [github.com/AIops-tools/Network-AIops](https://github.com/AIops-tools/Network-AIops/issues) — feature requests, contributions, and comments are all welcome.
 
 ## License
 

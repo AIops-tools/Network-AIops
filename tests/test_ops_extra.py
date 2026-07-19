@@ -153,8 +153,9 @@ def test_netbox_device_interfaces_maps_fields():
     iface.mac_address = "00:11:22:33:44:55"
     api.dcim.interfaces.filter.return_value = [iface]
 
-    rows = netbox_ops.netbox_device_interfaces(api, "edge-1", limit=10)
-    api.dcim.interfaces.filter.assert_called_once_with(device="edge-1", limit=10)
+    result = netbox_ops.netbox_device_interfaces(api, "edge-1", limit=10)
+    api.dcim.interfaces.filter.assert_called_once_with(device="edge-1", limit=11)
+    rows = result["interfaces"]
     assert rows[0]["type"] == "10gbase-x-sfpp"
     assert rows[0]["enabled"] is True
     assert rows[0]["mac_address"] == "00:11:22:33:44:55"
@@ -165,8 +166,9 @@ def test_netbox_list_devices_clamps_limit_to_minimum_one():
     api = MagicMock()
     api.dcim.devices.filter.return_value = []
     netbox_ops.netbox_list_devices(api, limit=0)
-    # limit is clamped to >= 1 so a 0/negative page size never reaches NetBox
-    assert api.dcim.devices.filter.call_args.kwargs["limit"] == 1
+    # limit is clamped to >= 1 so a 0/negative page size never reaches NetBox;
+    # one extra row is then requested to measure truncation
+    assert api.dcim.devices.filter.call_args.kwargs["limit"] == 2
 
 
 # ── environment getters not asserted in smoke (optics empty, ntp/vrf shapes) ─

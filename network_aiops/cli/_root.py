@@ -6,6 +6,7 @@ import typer
 
 from network_aiops.cli.config import config_app
 from network_aiops.cli.device import device_app
+from network_aiops.cli.diagnostics import diagnose_app
 from network_aiops.cli.doctor import doctor_cmd
 from network_aiops.cli.init import init_cmd
 from network_aiops.cli.netbox import netbox_app
@@ -19,6 +20,7 @@ app = typer.Typer(
 )
 
 app.add_typer(device_app, name="device")
+app.add_typer(diagnose_app, name="diagnose")
 app.add_typer(config_app, name="config")
 app.add_typer(netbox_app, name="netbox")
 app.add_typer(secret_app, name="secret")
