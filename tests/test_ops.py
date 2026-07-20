@@ -131,12 +131,14 @@ def test_config_merge_captures_backup_before_commit(driver_cls):
     calls: list[str] = []
     dev.get_config.side_effect = lambda **kw: (
         calls.append("get_config"), {"running": "hostname old\n"})[1]
-    dev.commit_config.side_effect = lambda: calls.append("commit_config")
+    dev.commit_config.side_effect = lambda **kw: calls.append("commit_config")
 
     result = config_ops.config_merge(TARGET, "ntp server 10.0.0.99")
     dev.load_merge_candidate.assert_called_once_with(config="ntp server 10.0.0.99")
     assert calls == ["get_config", "commit_config"]
-    assert result["backup"] == "hostname old\n"
+    # The body itself never comes back — only a digest of it (see test_config_lockout).
+    assert result["backup"]["bytes"] == len("hostname old\n")
+    assert result["backup"]["retainedForUndo"] is True
     assert result["committed"] is True
 
 
@@ -146,7 +148,7 @@ def test_config_replace_captures_backup_and_commits(driver_cls):
     result = config_ops.config_replace(TARGET, "hostname new\n")
     dev.load_replace_candidate.assert_called_once_with(config="hostname new\n")
     dev.commit_config.assert_called_once()
-    assert result["backup"] == "hostname core-sw1\n"
+    assert result["backup"]["bytes"] == len("hostname core-sw1\n")
     assert result["action"] == "replaced"
 
 

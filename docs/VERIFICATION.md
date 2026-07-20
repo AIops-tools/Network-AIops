@@ -60,12 +60,34 @@ Repeat per driver you care about (`ios`, `nxos`, `iosxr`, `eos`, `junos`).
       `_undo_id` and an audit row lands in the audit DB.
 - [ ] `network-aiops undo apply <id>` → the device returns to the prior config
       (verify with a fresh `config diff` / `show run`).
+- [ ] The result's `backup` is a **digest** (`bytes` / `sha256`), NOT the config
+      body — grep the result for a known SNMP community and confirm it is absent.
+- [ ] The recorded `undo_params` DO contain the byte-exact pre-change config
+      (including any banner control characters), i.e. it was not sanitized or
+      truncated on the way into `undo.db`.
 
-### 4. Governance actually gates
+### 4. Commit-confirm (the lockout guard — needs a real device)
+Mock tests prove the plumbing; only a real device proves the timer fires.
+- [ ] `config merge <file> --revert-in 60` → result shows
+      `commit.mode = "commit-confirm"` and `commit.safetyNet = "commit-confirm"`.
+- [ ] Wait out the 60s WITHOUT confirming → the device reverts on its own
+      (verify with `config backup` / `show run`). This is the whole point.
+- [ ] Repeat, then `network-aiops config confirm` within the window → the change
+      is still there after the timer would have expired.
+- [ ] **The real test**: stage a change that shuts the management interface with
+      `--revert-in 60` from an out-of-band console. The session dies, the device
+      restores itself, and the tool becomes reachable again with no undo run.
+- [ ] On a driver that does NOT support `revert_in`, confirm the result carries
+      `commit.safetyNet = "undo-only"` and the `NO COMMIT-CONFIRM SAFETY NET`
+      warning — a silent fallback here would be the dangerous outcome.
+- [ ] `confirm_commit` with nothing pending → reports `hadPendingCommit: false`
+      rather than erroring.
+
+### 5. Governance actually gates
 - [ ] With no `rules.yaml`, a `high`-risk op is refused unless
       `NETWORK_AUDIT_APPROVED_BY` names an approver (secure-by-default).
 
-### 5. Cleanup
+### 6. Cleanup
 - [ ] Restore the device to its pre-verification config; confirm it is audited.
 
 ## Criteria to claim live verification

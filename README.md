@@ -8,7 +8,7 @@
 > [github.com/AIops-tools/Network-AIops](https://github.com/AIops-tools/Network-AIops)
 > under the MIT license.
 
-Governed multi-vendor network device operations for AI agents — **32 MCP tools**,
+Governed multi-vendor network device operations for AI agents — **33 MCP tools**,
 every one wrapped with the bundled `@governed_tool` harness: a local unified audit
 log under `~/.network-aiops/`, policy engine, token/runaway budget guard,
 undo-token recording, and graduated-autonomy risk tiers. Credentials (device
@@ -100,7 +100,7 @@ export NETWORK_READ_ONLY=1
 ```
 
 With that set, the **4 write tools are never registered**. An MCP client
-lists **28 tools instead of 32** — the writes are not hidden, not
+lists **28 tools instead of 33** — the writes are not hidden, not
 gated behind a flag, and not merely refused when called. They are absent from
 the session. A model cannot invoke a tool it was never offered, and cannot be
 argued into one.

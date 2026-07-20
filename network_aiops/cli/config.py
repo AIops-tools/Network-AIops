@@ -1,8 +1,16 @@
-"""``network-aiops config ...`` sub-commands (backup / diff / merge / replace / rollback)."""
+"""``network-aiops config ...`` sub-commands (backup / diff / merge / replace / confirm / rollback).
+
+Merge and replace commit under a device-side revert timer (``--revert-in``,
+default 300s): the device rolls the change back on its own unless
+``network-aiops config confirm`` follows. That is the only guard that survives
+the change severing your own management path, so the workflow is
+merge/replace → check reachability → confirm.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -19,13 +27,65 @@ from network_aiops.cli._common import (
     read_config_text,
 )
 from network_aiops.ops import config_ops
+from network_aiops.ops.config_ops import DEFAULT_REVERT_IN
 
 config_app = typer.Typer(help="Device configuration operations.", no_args_is_help=True)
 console = Console()
 
+RevertInOption = Annotated[
+    int,
+    typer.Option(
+        "--revert-in",
+        help=(
+            "Device-side revert timer in seconds; the device undoes the change "
+            "unless 'config confirm' follows. 0 disables the timer."
+        ),
+    ),
+]
+
 
 def _resolve(target: str | None):
     return get_manager().target(target)
+
+
+def _require_ok(result: dict) -> dict:
+    """Surface a governed tool's sanitised ``{"error": ...}`` as a CLI failure.
+
+    The governed twins are wrapped in ``@tool_errors``, which turns a refusal
+    (e.g. ``UnreversibleCommit``) into an error dict rather than an exception.
+    Without this the CLI would print a "success" banner over a refusal.
+    """
+    if isinstance(result, dict) and result.get("error"):
+        console.print(f"[red]Error: {result['error']}[/]")
+        raise typer.Exit(1)
+    return result
+
+
+def _print_preview(result: dict) -> None:
+    """Echo a dry-run: the diff plus whether the real commit would have a net.
+
+    The preview runs the same refusal as the write, so reaching here at all
+    means the commit would not be refused.
+    """
+    console.print(result["diff"] or "[dim](no changes)[/]")
+    commit = result.get("commit") or {}
+    if commit.get("warning"):
+        console.print(f"[bold red]{commit['warning']}[/]")
+    elif commit.get("wouldArmTimer"):
+        console.print(
+            f"[yellow]Would commit with a {commit['revertInSeconds']}s revert timer; "
+            f"'config confirm' makes it permanent.[/]"
+        )
+
+
+def _print_commit(result: dict) -> None:
+    """Echo the diff plus how the commit was actually made (timer or not)."""
+    console.print(result["diff"] or "[dim](no changes)[/]")
+    commit = result.get("commit") or {}
+    if commit.get("warning"):
+        console.print(f"[bold red]{commit['warning']}[/]")
+    if commit.get("next"):
+        console.print(f"[yellow]{commit['next']}[/]")
 
 
 @config_app.command("backup")
@@ -60,19 +120,24 @@ def config_merge_cmd(
     config_file: Path,
     target: TargetOption = None,
     dry_run: DryRunOption = False,
+    revert_in: RevertInOption = DEFAULT_REVERT_IN,
 ) -> None:
-    """Merge a config snippet and commit (double confirm; --dry-run shows the diff)."""
+    """Merge a config snippet and commit under a revert timer (double confirm)."""
     text = read_config_text(config_file)
     tgt = _resolve(target)
     if dry_run:
         dry_run_print(operation="config_merge", detail=f"merge into {tgt.name}")
-        result = config_ops.config_diff(tgt, text, replace=False)
-        console.print(result["diff"] or "[dim](no changes)[/]")
+        # Through the GOVERNED twin, not the ops layer: the preview then runs the
+        # same guard AND lands the same audit row as any other governed call.
+        _print_preview(_require_ok(
+            gov.config_merge(config_text=text, target=target, revert_in=revert_in,
+                             dry_run=True)
+        ))
         return
     double_confirm("merge config into", tgt.name)
-    result = gov.config_merge(config_text=text, target=target)
+    result = _require_ok(gov.config_merge(config_text=text, target=target, revert_in=revert_in))
     console.print(f"[green]Committed merge to {result['name']}[/]")
-    console.print(result["diff"] or "[dim](no changes)[/]")
+    _print_commit(result)
 
 
 @config_app.command("replace")
@@ -81,19 +146,40 @@ def config_replace_cmd(
     config_file: Path,
     target: TargetOption = None,
     dry_run: DryRunOption = False,
+    revert_in: RevertInOption = DEFAULT_REVERT_IN,
 ) -> None:
-    """Replace the full config and commit (HIGH RISK — double confirm; --dry-run shows diff)."""
+    """Replace the full config under a revert timer (HIGH RISK — double confirm)."""
     text = read_config_text(config_file)
     tgt = _resolve(target)
     if dry_run:
         dry_run_print(operation="config_replace", detail=f"replace config of {tgt.name}")
-        result = config_ops.config_diff(tgt, text, replace=True)
-        console.print(result["diff"] or "[dim](no changes)[/]")
+        _print_preview(_require_ok(
+            gov.config_replace(config_text=text, target=target, revert_in=revert_in,
+                               dry_run=True)
+        ))
         return
     double_confirm("REPLACE config of", tgt.name)
-    result = gov.config_replace(config_text=text, target=target)
+    result = _require_ok(gov.config_replace(config_text=text, target=target, revert_in=revert_in))
     console.print(f"[green]Committed replace to {result['name']}[/]")
-    console.print(result["diff"] or "[dim](no changes)[/]")
+    _print_commit(result)
+
+
+@config_app.command("confirm")
+@cli_errors
+def config_confirm_cmd(
+    target: TargetOption = None,
+    dry_run: DryRunOption = False,
+) -> None:
+    """Confirm a pending commit-confirm change, cancelling its revert timer."""
+    tgt = _resolve(target)
+    if dry_run:
+        dry_run_print(operation="confirm_commit", detail=f"confirm pending commit on {tgt.name}")
+        return
+    result = _require_ok(gov.confirm_commit(target=target))
+    if result.get("confirmed"):
+        console.print(f"[green]Confirmed the pending commit on {tgt.name} — now permanent.[/]")
+    else:
+        console.print(f"[yellow]{result.get('note', 'Nothing to confirm.')}[/]")
 
 
 @config_app.command("rollback")

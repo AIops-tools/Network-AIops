@@ -32,7 +32,7 @@ EXPECTED_TOOLS = {
     # config (read)
     "config_backup", "config_diff",
     # config (write)
-    "config_merge", "config_replace", "config_rollback",
+    "config_merge", "config_replace", "config_rollback", "confirm_commit",
     # netbox (read)
     "netbox_list_devices", "netbox_get_device", "netbox_device_interfaces",
 }
@@ -156,7 +156,7 @@ def test_every_mcp_tool_is_governed_by_harness():
 
     tool_objs = _shared.mcp._tool_manager._tools
     assert EXPECTED_TOOLS <= set(tool_objs), "tool registry incomplete"
-    assert len(tool_objs) == 32, (
+    assert len(tool_objs) == 33, (
         "tool count changed — update README/SKILL/server.json too"
     )
     for name, tool in tool_objs.items():
@@ -521,7 +521,7 @@ def test_config_merge_records_replace_to_backup_undo(monkeypatch):
     recorded = {}
 
     class _Store:
-        def record(self, *, skill, tool, undo_descriptor, orig_params):
+        def record(self, *, skill, tool, undo_descriptor, orig_params, effect_verified=True):
             recorded["descriptor"] = undo_descriptor
             return "undo-1"
 
@@ -531,7 +531,10 @@ def test_config_merge_records_replace_to_backup_undo(monkeypatch):
     assert "error" not in result
     assert result["committed"] is True
     assert recorded["descriptor"]["tool"] == "config_replace"
-    assert recorded["descriptor"]["params"]["config_text"] == result["backup"]
+    # The inverse carries the RAW pre-change config; the result carries only its
+    # digest, so the config body never reaches the caller's transcript.
+    assert recorded["descriptor"]["params"]["config_text"] == "hostname core-sw1\n"
+    assert result["backup"]["sha256"], "caller gets a digest instead of the body"
     assert recorded["descriptor"]["skill"] == "network-aiops"
     assert result.get("_undo_id") == "undo-1"
 
@@ -550,7 +553,7 @@ def test_config_replace_records_undo(monkeypatch):
     recorded = {}
 
     class _Store:
-        def record(self, *, skill, tool, undo_descriptor, orig_params):
+        def record(self, *, skill, tool, undo_descriptor, orig_params, effect_verified=True):
             recorded["descriptor"] = undo_descriptor
             return "undo-2"
 
@@ -559,7 +562,8 @@ def test_config_replace_records_undo(monkeypatch):
     result = cfg_tools.config_replace(config_text="hostname new\n", target="core-sw1")
     assert "error" not in result
     assert recorded["descriptor"]["tool"] == "config_replace"
-    assert recorded["descriptor"]["params"]["config_text"] == result["backup"]
+    assert recorded["descriptor"]["params"]["config_text"] == "hostname core-sw1\n"
+    assert result["backup"]["retainedForUndo"] is True
 
 
 @pytest.mark.unit

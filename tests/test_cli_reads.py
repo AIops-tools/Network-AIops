@@ -19,9 +19,13 @@ def device_cli(monkeypatch, eos_target, fake_driver_cls):
     """Route the device + config CLI target resolution to the fake device."""
     import network_aiops.cli.config as cli_config
     import network_aiops.cli.device as cli_device
+    from mcp_server.tools import config_ops as gov
 
     monkeypatch.setattr(cli_device, "_resolve", lambda target=None: eos_target)
     monkeypatch.setattr(cli_config, "_resolve", lambda target=None: eos_target)
+    # The config CLI routes BOTH its dry-run and its real path through the
+    # governed twin, which resolves the target itself.
+    monkeypatch.setattr(gov, "_target", lambda name=None: eos_target)
     return eos_target
 
 

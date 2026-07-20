@@ -18,16 +18,38 @@ from pathlib import Path
 from typing import Any, Optional
 
 from mcp.server.fastmcp import FastMCP
+from napalm.base import exceptions as napalm_exc
 
 from network_aiops.config import load_config
 from network_aiops.connection import ConnectionManager, NetworkApiError
-from network_aiops.governance import sanitize
+from network_aiops.governance import mark_unknown, sanitize
 
 logger = logging.getLogger(__name__)
 
 _DOCTOR_HINT = "Run 'network-aiops doctor' to verify device config and reachability."
 
 _SUPPORTED = "ios, nxos, nxos_ssh, iosxr, eos, junos"
+
+
+# Failures that leave the request's fate genuinely undetermined: the session was
+# established and then dropped, so a config change already handed to the device
+# MAY be applied even though nothing came back.
+#
+# This is the sharpest case in the line: a commit that changes the management
+# interface, the VTY ACL, or AAA severs the very session carrying it. The device
+# is then reachable only out-of-band, and the recorded rollback needs a NEW
+# session to that same address.
+#
+# Deliberately narrow. ConnectionException (never established) and CommitError
+# (the device rejected the change and said so) are ordinary failures with known
+# outcomes; only a mid-session drop is undetermined.
+_UNDETERMINED_ERRORS = (napalm_exc.ConnectionClosedException,)
+
+
+# Long enough to carry the remediation sentence. These messages teach the
+# caller what to do instead, and that clause comes last — a 300-char cap cut
+# it off silently on every refusal long enough to need one.
+_ERROR_MAX = 800
 
 
 def _safe_error(exc: Exception, tool: str) -> str:
@@ -43,7 +65,7 @@ def _safe_error(exc: Exception, tool: str) -> str:
         NetworkApiError,
     )
     if isinstance(exc, _passthrough):
-        return sanitize(str(exc), 300)
+        return sanitize(str(exc), _ERROR_MAX)
     return f"{type(exc).__name__}: operation failed."
 
 
@@ -67,7 +89,13 @@ def tool_errors(shape: str = "dict") -> Callable:
                     return [{"error": msg, "hint": _DOCTOR_HINT}]
                 if shape == "str":
                     return f"Error: {msg} {_DOCTOR_HINT}"
-                return {"error": msg, "hint": _DOCTOR_HINT}
+                payload = {"error": msg, "hint": _DOCTOR_HINT}
+                # Flatten the exception into a dict and its type is gone
+                # for good — so classify here, while it is still known,
+                # whether the operation may nonetheless have taken effect.
+                if isinstance(e, _UNDETERMINED_ERRORS):
+                    return mark_unknown(payload)
+                return payload
 
         return wrapper
 

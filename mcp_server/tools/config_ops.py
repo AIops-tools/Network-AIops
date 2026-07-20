@@ -1,32 +1,56 @@
-"""Config MCP tools: backup + diff (read/dry-run), merge + replace + rollback (write).
+"""Config MCP tools: backup + diff (read/dry-run), merge/replace/confirm/rollback (write).
 
 Every tool is wrapped with ``@governed_tool`` (the network-aiops harness):
 policy pre-check, budget/runaway guard, risk-tier gate, audit logging to
-~/.network-aiops/audit.db, and undo-token recording. ``config_merge`` and
-``config_replace`` capture the pre-change running config and pass an ``undo=``
-lambda so the harness records a ``config_replace``-to-backup reversal (the
-device must support config replace for the undo to apply). ``config_rollback``
-records no undo.
+~/.network-aiops/audit.db, and undo-token recording.
+
+``config_merge`` and ``config_replace`` commit under a device-side revert timer
+(``revert_in``, default 300s) and capture the pre-change running config for the
+undo. The RAW backup travels to the harness through ``capture_prior_state``,
+NOT through the result — a running config carries credential hashes, SNMP
+communities and PSKs, and a tool result goes straight into an agent transcript.
+``_restore_undo`` reads it back from that stash and builds a
+``config_replace``-to-backup inverse. ``config_rollback`` records no undo.
 """
 
 from typing import Optional
 
 from mcp_server._shared import _target, mcp, tool_errors
 from network_aiops.governance import governed_tool
+from network_aiops.governance.outcome import take_prior_state
 from network_aiops.ops import config_ops as ops
+from network_aiops.ops.config_ops import DEFAULT_REVERT_IN
 
 
 def _restore_undo(params: dict, result) -> Optional[dict]:
-    """Build the inverse of a committed change: replace config back to the backup."""
-    if not isinstance(result, dict) or "backup" not in result:
+    """Build the inverse of a committed change: replace config back to the backup.
+
+    The pre-change config is read from the harness' prior-state stash (the write
+    put it there before committing) rather than from ``result``, which carries
+    only a digest. On the lost-response path the harness has already consumed
+    the stash and hands it over inside ``result["priorState"]``.
+    """
+    prior = result.get("priorState") if isinstance(result, dict) else None
+    if not isinstance(prior, dict):
+        prior = take_prior_state() or {}
+    running = prior.get("running")
+    if not isinstance(running, str) or not running.strip():
         return None
     return {
         "tool": "config_replace",
-        "params": {"target": params.get("target"), "config_text": result["backup"]},
+        "params": {
+            "target": params.get("target"),
+            "config_text": running,
+            # The restore must NOT sit under a revert timer of its own: nobody
+            # confirms a rollback, and an auto-revert would put the broken
+            # config straight back.
+            "revert_in": 0,
+        },
         "skill": "network-aiops",
         "note": (
             "Inverse: restore the captured pre-change running config via "
-            "config_replace. The device must support config replace."
+            "config_replace (no revert timer — a rollback must be permanent). "
+            "The device must support config replace."
         ),
     }
 
@@ -64,33 +88,92 @@ def config_diff(
 @mcp.tool()
 @governed_tool(risk_level="medium", undo=_restore_undo)
 @tool_errors("dict")
-def config_merge(config_text: str, target: Optional[str] = None) -> dict:
-    """[WRITE] Merge a config snippet and commit. Captures running config for undo.
+def config_merge(
+    config_text: str,
+    revert_in: int = DEFAULT_REVERT_IN,
+    dry_run: bool = False,
+    target: Optional[str] = None,
+) -> dict:
+    """[WRITE] Merge a config snippet and commit under a device-side revert timer.
 
-    Returns ``diff`` (what changed) and ``backup`` (pre-change running config).
-    The recorded undo restores ``backup`` via config_replace.
+    The device REVERTS the change by itself after ``revert_in`` seconds unless
+    confirm_commit follows — so a change that severs your own management access
+    heals without anyone having to reach the box. Verify reachability, THEN call
+    confirm_commit. Check ``commit.safetyNet`` in the result: drivers that
+    cannot arm a timer commit permanently and say so in ``commit.warning``.
+
+    Returns ``diff`` and a ``backup`` digest (size + sha256). The full config is
+    deliberately NOT returned — it carries credential hashes and PSKs — but the
+    raw text is retained in undo.db for the recorded rollback.
+
+    dry_run=True stages the candidate, returns the diff, discards it, and runs
+    the SAME refusal the real commit would — so a green preview is never
+    followed by a refusal.
 
     Args:
         config_text: The configuration snippet to merge.
+        revert_in: Device-side revert timer in seconds (default 300). 0 disables
+            it, leaving the recorded undo as the only rollback path.
+        dry_run: If True, preview the diff + safety assessment without committing.
         target: Device name from config.
     """
-    return ops.config_merge(_target(target), config_text)
+    if dry_run:
+        return ops.config_preview(
+            _target(target), config_text, replace=False, revert_in=revert_in
+        )
+    return ops.config_merge(_target(target), config_text, revert_in=revert_in)
 
 
 @mcp.tool()
 @governed_tool(risk_level="high", undo=_restore_undo)
 @tool_errors("dict")
-def config_replace(config_text: str, target: Optional[str] = None) -> dict:
-    """[WRITE] Replace the full config and commit. HIGH RISK. Captures running for undo.
+def config_replace(
+    config_text: str,
+    revert_in: int = DEFAULT_REVERT_IN,
+    dry_run: bool = False,
+    target: Optional[str] = None,
+) -> dict:
+    """[WRITE] Replace the full config and commit under a revert timer. HIGH RISK.
 
-    Returns ``diff`` and ``backup``. The recorded undo replaces the config back
-    to ``backup`` (the device must support config replace).
+    Same commit-confirm contract as config_merge: the device reverts after
+    ``revert_in`` seconds unless confirm_commit follows. Verify reachability
+    first, then confirm. Check ``commit.safetyNet`` — when no timer could be
+    armed the change is permanent on landing.
+
+    Returns ``diff`` and a ``backup`` digest; the raw pre-change config is kept
+    in undo.db (0600) for the recorded rollback, not echoed back here.
+
+    dry_run=True previews the diff and runs the same refusal the real commit
+    would, so the preview can never disagree with the commit.
 
     Args:
         config_text: The full replacement configuration.
+        revert_in: Device-side revert timer in seconds (default 300). 0 disables
+            it, leaving the recorded undo as the only rollback path.
+        dry_run: If True, preview the diff + safety assessment without committing.
         target: Device name from config.
     """
-    return ops.config_replace(_target(target), config_text)
+    if dry_run:
+        return ops.config_preview(
+            _target(target), config_text, replace=True, revert_in=revert_in
+        )
+    return ops.config_replace(_target(target), config_text, revert_in=revert_in)
+
+
+@mcp.tool()
+@governed_tool(risk_level="medium")
+@tool_errors("dict")
+def confirm_commit(target: Optional[str] = None) -> dict:
+    """[WRITE] Confirm a pending commit-confirm change, cancelling its revert timer.
+
+    The second half of the commit-confirm workflow. Run it only AFTER verifying
+    the device is still reachable and healthy — doing nothing is the safe
+    alternative, because the device then reverts on its own.
+
+    Args:
+        target: Device name from config.
+    """
+    return ops.confirm_commit(_target(target))
 
 
 @mcp.tool()

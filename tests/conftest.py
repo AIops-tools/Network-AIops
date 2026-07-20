@@ -34,6 +34,9 @@ class FakeDriver:
         self.committed = False
         self.discarded = False
         self.rolled_back = False
+        self.revert_in = None
+        self.pending_commit = False
+        self.confirmed = False
         self._candidate = None
 
     def open(self):
@@ -166,8 +169,19 @@ class FakeDriver:
         self.discarded = True
         self._candidate = None
 
-    def commit_config(self):
+    def commit_config(self, message="", revert_in=None):
+        """Commit, optionally arming a device-side revert timer (NAPALM >= 3.0)."""
         self.committed = True
+        self.revert_in = revert_in
+        if revert_in is not None:
+            self.pending_commit = True
+
+    def has_pending_commit(self):
+        return self.pending_commit
+
+    def confirm_commit(self):
+        self.confirmed = True
+        self.pending_commit = False
 
     def rollback(self):
         self.rolled_back = True

@@ -124,7 +124,10 @@ def test_governed_config_merge_records_undo_and_apply_previews(gov_home, target_
     preview = undo_tools.undo_apply(undo_id=undo_id, dry_run=True)
     assert preview["dryRun"] is True
     assert preview["wouldApply"]["tool"] == "config_replace"
-    assert preview["wouldApply"]["params"]["config_text"] == result["backup"]
+    # The inverse replays the RAW captured config, which never appeared in the
+    # result — the caller only ever saw its digest.
+    assert preview["wouldApply"]["params"]["config_text"] == "hostname core-sw1\n"
+    assert result["backup"]["retainedForUndo"] is True
 
 
 # ── netbox twins against a mocked client ────────────────────────────────────

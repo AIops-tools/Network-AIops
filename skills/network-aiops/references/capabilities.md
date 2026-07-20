@@ -1,6 +1,6 @@
 # network-aiops Capabilities
 
-32 MCP tools (28 read / 4 write). Every tool is wrapped with `@governed_tool`
+33 MCP tools (28 read / 5 write). Every tool is wrapped with `@governed_tool`
 (audit + policy + budget + risk-tier; undo where a clean inverse exists). Returns
 are high-signal summaries — config blobs are sanitized and size-bounded. Secrets
 are never returned (user password hashes and SNMP community strings are redacted).
@@ -52,8 +52,9 @@ are never returned (user password hashes and SNMP community strings are redacted
 
 | Tool | Effect | Risk | Undo |
 |------|--------|:----:|------|
-| `config_merge` | merge snippet + commit | medium | `config_replace` back to captured running config |
-| `config_replace` | replace full config + commit | **high** | `config_replace` back to captured running config |
+| `config_merge` | merge snippet + commit under a revert timer | medium | `config_replace` back to captured running config |
+| `config_replace` | replace full config + commit under a revert timer | **high** | `config_replace` back to captured running config |
+| `confirm_commit` | confirm a pending commit-confirm, cancelling its revert timer | medium | none (doing nothing lets the device revert) |
 | `config_rollback` | revert last commit | medium | none (already a revert) |
 | `undo_apply` | execute a recorded inverse descriptor — itself governed, single-use, supports `dry_run` | medium | none (is the undo) |
 
@@ -97,3 +98,58 @@ the `<driver>` driver").
 - Connection / command / driver errors are translated centrally at the connection
   layer into a teaching `NetworkApiError`, so agents see actionable messages.
 - Only the five core drivers are validated here; community drivers are untested.
+
+## Commit-confirm (the guard for a change that can lock you out)
+
+`config_merge` / `config_replace` call NAPALM's `commit_config(revert_in=N)`
+(default 300s). The **device** reverts the change on its own unless
+`confirm_commit` arrives first. This matters because the recorded undo is a
+`config_replace` that must open a NEW session to the same device — a commit that
+shuts the management interface, tightens the VTY ACL or breaks AAA kills exactly
+that path, so an undo token is not a guard against lockout. A device-enforced
+timer is.
+
+Workflow: **commit (timer armed) → verify reachability from a NEW session →
+`confirm_commit`**. Doing nothing is the safe branch.
+
+The result's `commit` block reports what actually happened:
+
+| `commit.safetyNet` | Meaning |
+|---|---|
+| `commit-confirm` | timer armed; the change reverts in `commit.revertInSeconds` unless confirmed |
+| `undo-only` | **no timer** — the driver refused one or `revert_in=0` was passed. The change is permanent on landing; `commit.warning` says so. Arrange out-of-band access before making lockout-capable changes on such a device. |
+
+A write with **neither** a timer nor a usable captured backup is refused
+outright (`UnreversibleCommit`) before anything is committed.
+
+### Backups are digested, not echoed
+
+`config_merge` / `config_replace` return `backup` as `{bytes, sha256,
+retainedForUndo}` — not the config body. A running config carries credential
+hashes, SNMP communities, PSKs and RADIUS keys, and a tool result lands in the
+agent transcript. The byte-exact raw text is kept only in `undo.db` (0600) for
+the rollback. Use `config_backup` when you deliberately want the text.
+
+### `dry_run` does not bypass the guard
+
+`config_merge(dry_run=True)` / `config_replace(dry_run=True)` (and the CLI's
+`--dry-run`) stage the candidate, return the diff, discard it, and run the SAME
+`UnreversibleCommit` refusal the real commit would — a green preview is never
+followed by a refusal a model would read as transient and retry.
+
+The CLI's `--dry-run` on `config merge` / `config replace` routes through the
+same governed twin, so it reaches the same guard **and** records the same audit
+row. The line's invariant is: **a dry_run MAY read; it must never write.** A
+preview that cannot read cannot answer "would this be refused?", so reads are
+expected; the mutating call is the thing that must never happen.
+
+(`config rollback` and `config confirm` have no `dry_run` parameter — there is no
+governed preview to route through, so their `--dry-run` short-circuits
+client-side and records nothing.)
+
+One asymmetry is deliberate and safe in the right direction: the preview can only
+*predict* commit-confirm support from the driver's `commit_config` signature,
+whereas the real write also learns from a `NotImplementedError` raised at commit
+time. So the preview's refusal condition is a strict **subset** of the write's —
+it never refuses something the write would allow. The preview reports its
+prediction as `commit.wouldArmTimer` / `commit.safetyNet`.

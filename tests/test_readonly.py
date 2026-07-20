@@ -99,6 +99,9 @@ def test_apply_read_only_unregisters_write_tools(monkeypatch):
         assert dropped, "expected at least one write tool to be removed"
         assert "config_replace" in dropped and "config_merge" in dropped
         assert "config_rollback" in dropped and "undo_apply" in dropped
+        assert "confirm_commit" in dropped, (
+            "confirming a pending commit makes a change permanent — it is a write"
+        )
         assert "get_interfaces" not in dropped and "device_facts" not in dropped
         assert "config_backup" not in dropped, "reading the config is not a write"
         assert "config_diff" not in dropped, "the dry-run diff never commits"

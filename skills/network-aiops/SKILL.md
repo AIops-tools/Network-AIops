@@ -2,7 +2,7 @@
 name: network-aiops
 slug: network-aiops
 displayName: "Network AIops"
-summary: "Governed network device ops (NAPALM) — 32 MCP tools with audit/undo."
+summary: "Governed network device ops (NAPALM) — 33 MCP tools with audit/undo."
 license: MIT
 homepage: https://github.com/AIops-tools/Network-AIops
 tags: [aiops, mcp, governance, network]
@@ -32,7 +32,7 @@ compatibility: >
 
 > **Disclaimer**: This is a community-maintained open-source project and is **not affiliated with, endorsed by, or sponsored by Cisco, Arista, Juniper, NetBox Labs, or any network vendor.** Vendor and product names are trademarks of their respective owners. Source code is publicly auditable at [github.com/AIops-tools/Network-AIops](https://github.com/AIops-tools/Network-AIops) under the MIT license.
 
-Governed multi-vendor network device operations — **32 MCP tools**, every one wrapped with the bundled `@governed_tool` harness: a local unified audit log under `~/.network-aiops/`, policy engine, token/runaway budget guard, undo-token recording, and graduated-autonomy risk tiers. Devices are reached over NAPALM; an optional NetBox block adds source-of-truth lookups. Secrets (device passwords + NetBox token) are kept in an **encrypted store** (`secrets.enc`), unlocked by `NETWORK_AIOPS_MASTER_PASSWORD`.
+Governed multi-vendor network device operations — **33 MCP tools**, every one wrapped with the bundled `@governed_tool` harness: a local unified audit log under `~/.network-aiops/`, policy engine, token/runaway budget guard, undo-token recording, and graduated-autonomy risk tiers. Devices are reached over NAPALM; an optional NetBox block adds source-of-truth lookups. Secrets (device passwords + NetBox token) are kept in an **encrypted store** (`secrets.enc`), unlocked by `NETWORK_AIOPS_MASTER_PASSWORD`.
 
 > **Standalone**: the governance harness is bundled in the package (`network_aiops.governance`) — network-aiops has no external skill-family dependency. Coverage focuses on common operations and is not yet exhaustive.
 
@@ -133,9 +133,19 @@ Other platforms (Nokia SR OS / SR Linux, Huawei VRP, etc.) are reachable via NAP
 
 1. `network-aiops config backup -t core-sw1 -o core-sw1.cfg` → keep a known-good copy
 2. `network-aiops config diff change.cfg -t core-sw1` → preview the diff (nothing committed)
-3. `network-aiops config merge change.cfg -t core-sw1` (double confirm) → commit; the harness records a `config_replace`-to-backup undo descriptor
-4. `network-aiops device interfaces -t core-sw1` → verify the result
-5. **Failure branch**: if the connection fails (`Could not connect/authenticate`), run `network-aiops doctor` — it shows whether `NETWORK_CORE_SW1_PASSWORD` is set and whether the host/port is reachable; the skill never retries a denied auth.
+3. `network-aiops config merge change.cfg -t core-sw1` (double confirm) → commits **under a 300s device-side revert timer**; the harness also records a `config_replace`-to-backup undo descriptor
+4. `network-aiops device interfaces -t core-sw1` → verify the result **and that you can still reach the device**
+5. `network-aiops config confirm -t core-sw1` → cancels the revert timer, making the change permanent. If you skip this (or get locked out), the device reverts by itself — that is the point
+6. **Failure branch**: if the connection fails (`Could not connect/authenticate`), run `network-aiops doctor` — it shows whether `NETWORK_CORE_SW1_PASSWORD` is set and whether the host/port is reachable; the skill never retries a denied auth.
+
+### Change something that could lock you out (mgmt interface, VTY ACL, AAA)
+
+1. `network-aiops config backup -t core-sw1 -o core-sw1.cfg` → an off-box copy, independent of the tool
+2. `network-aiops config diff risky.cfg -t core-sw1` → confirm the diff touches only what you intend
+3. `network-aiops config merge risky.cfg -t core-sw1 --revert-in 120` → short timer: if the change severs your session, the device restores itself in 2 minutes with nobody logged in
+4. Re-connect and verify. **Do not confirm from a session opened before the commit** — it may survive a change that blocks *new* logins
+5. `network-aiops config confirm -t core-sw1` → only once a NEW session proves the path still works
+6. **Failure branch**: if the result carries `commit.warning` with `safetyNet: "undo-only"`, this driver could not arm a timer. The change is permanent on landing and the recorded undo needs a working session — arrange out-of-band access (console/OOB mgmt) before you commit anything of this kind.
 
 ### Root-cause a flaky uplink / peering problem (RCA-first)
 
@@ -153,7 +163,7 @@ Other platforms (Nokia SR OS / SR Linux, Huawei VRP, etc.) are reachable via NAP
 | Cloud models (Claude, GPT) | Either | MCP gives structured JSON I/O |
 | Automated pipelines | **MCP** | type-safe parameters, audited |
 
-## MCP Tools (32 — 28 read, 4 write)
+## MCP Tools (33 — 28 read, 5 write)
 
 | Category | Tools | R/W |
 |----------|-------|:---:|
@@ -162,12 +172,14 @@ Other platforms (Nokia SR OS / SR Linux, Huawei VRP, etc.) are reachable via NAP
 | Platform / env | `get_environment`, `get_optics`, `get_ntp_servers`, `get_ntp_stats`, `get_users`, `get_snmp_information`, `get_network_instances`, `device_health` | Read |
 | Diagnostics / RCA | `interface_health_rca`, `bgp_neighbor_rca` | Read |
 | Config | `config_backup`, `config_diff` | Read |
-| | `config_merge`, `config_replace`, `config_rollback` | Write |
+| | `config_merge`, `config_replace`, `confirm_commit`, `config_rollback` | Write |
 | NetBox | `netbox_list_devices`, `netbox_get_device`, `netbox_device_interfaces` | Read |
 | Undo | `undo_list` | Read |
 | | `undo_apply` | Write |
 
-**Harness features that light up**: `config_merge` and `config_replace` capture the pre-change running config and pass an `undo=` lambda so the harness records an inverse descriptor (with `_undo_id`) that restores the captured config via `config_replace` — the device must support config replace for the undo to apply. `config_rollback` declares no undo; `config_replace` is tagged `risk_level=high`. `config_diff` is a pure dry-run (stage candidate → compare → discard). The two RCA tools (`interface_health_rca`, `bgp_neighbor_rca`) are pure read-only analyses (`risk_level=low`) that collect getter output and rank findings worst-first. All 32 tools are audit-logged under `~/.network-aiops/` and pass through the policy pre-check + budget/runaway guard + graduated risk-tier gate. Avoid tight poll loops — the runaway breaker backs this up.
+**Commit-confirm is the primary safety net.** `config_merge` and `config_replace` commit with a device-side revert timer (`revert_in`, default 300s): the device rolls the change back on its own unless `confirm_commit` follows. This is the only guard that survives the change severing your own management path — a commit that shuts the management interface, tightens the VTY ACL or breaks AAA also kills the session the recorded undo would need, so the *device* has to be the one enforcing the rollback. Workflow: **commit with timer → verify you can still reach the device → `confirm_commit`** (or do nothing and let it revert). Drivers that cannot arm a timer fall back to a plain commit and say so in `commit.warning` / `commit.safetyNet` — check that field, because for those devices the net is absent.
+
+**Harness features that light up**: `config_merge` and `config_replace` capture the pre-change running config and pass an `undo=` lambda so the harness records an inverse descriptor (with `_undo_id`) that restores the captured config via `config_replace` — the device must support config replace for the undo to apply. The raw config is handed to the harness out-of-band and kept only in `undo.db` (0600); the tool result returns a **digest** (size + SHA-256), never the config body, because a running config carries credential hashes, SNMP communities and PSKs that would otherwise land in the agent transcript. `config_rollback` declares no undo; `config_replace` is tagged `risk_level=high`. `config_diff` is a pure dry-run (stage candidate → compare → discard). The two RCA tools (`interface_health_rca`, `bgp_neighbor_rca`) are pure read-only analyses (`risk_level=low`) that collect getter output and rank findings worst-first. All 33 tools are audit-logged under `~/.network-aiops/` and pass through the policy pre-check + budget/runaway guard + graduated risk-tier gate. Avoid tight poll loops — the runaway breaker backs this up.
 
 ## Encrypted secret store
 
@@ -247,7 +259,7 @@ All operations are automatically audited via the bundled `@governed_tool` decora
 - Undo store records inverse descriptors for reversible writes (config merge/replace → restore captured running config)
 - Graduated-autonomy risk tiers gate write operations (require a recorded approver for the highest tiers)
 
-- **Read-only mode**: `NETWORK_READ_ONLY=1` unregisters the four write tools (`config_merge`, `config_replace`, `config_rollback`, `undo_apply`) — 32 tools become 28 and the harness refuses non-read calls independently, so the CLI is covered too.
+- **Read-only mode**: `NETWORK_READ_ONLY=1` unregisters the five write tools (`config_merge`, `config_replace`, `confirm_commit`, `config_rollback`, `undo_apply`) — 33 tools become 28 and the harness refuses non-read calls independently, so the CLI is covered too.
 
 The harness is bundled in the package — no external dependency, no manual setup. See `references/setup-guide.md` for security details.
 

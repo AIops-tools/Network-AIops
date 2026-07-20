@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.6.0 — 2026-07-20
+
+### Fixed
+- **Commit-confirm.** `config_merge` and `config_replace` now commit with `revert_in` (default 300s) and there is a new `confirm_commit` tool.
+- **The full running config is no longer returned to the caller.** `config_merge` / `config_replace` used to hand back the entire backup — credential hashes, SNMP communities, PSKs, RADIUS keys — straight into the agent transcript.
+- Harness: a write whose response is lost is audited `status=unknown`, not `error` — it may have taken effect. Undo tokens gain `effectVerified` (undo.db migrated in place).
+- Harness: a dry-run no longer records an undo token, and no longer requires a named approver. Guards now run on the preview path.
+- Truncated strings end in an ellipsis instead of being cut silently; error messages are capped at 800 chars, not 300.
+
+See RELEASE_NOTES.md for the full detail.
+
 ## Unreleased
 
 ### Added
