@@ -106,6 +106,40 @@ def test_governed_config_rollback_twin(gov_home, target_read, fake_driver_cls):
 
 
 @pytest.mark.unit
+def test_governed_confirm_commit_dry_run_reads_pending_and_audits(
+    gov_home, target_read, fake_driver_cls
+):
+    result = config_tools.confirm_commit(dry_run=True)
+    assert result["dryRun"] is True
+    assert result["action"] == "confirm_commit"
+    assert result["committed"] is False
+    assert result["hasPendingCommit"] is False  # FakeDriver has none pending
+    conn = sqlite3.connect(gov_home / "audit.db")
+    try:
+        tools = [r[0] for r in conn.execute("SELECT tool FROM audit_log")]
+    finally:
+        conn.close()
+    assert "confirm_commit" in tools
+
+
+@pytest.mark.unit
+def test_governed_config_rollback_dry_run_digests_without_rolling_back(
+    gov_home, target_read, fake_driver_cls
+):
+    result = config_tools.config_rollback(dry_run=True)
+    assert result["dryRun"] is True
+    assert result["action"] == "config_rollback"
+    assert result["committed"] is False
+    assert result["current"]["bytes"] > 0  # digested the running config it would replace
+    conn = sqlite3.connect(gov_home / "audit.db")
+    try:
+        tools = [r[0] for r in conn.execute("SELECT tool FROM audit_log")]
+    finally:
+        conn.close()
+    assert "config_rollback" in tools
+
+
+@pytest.mark.unit
 def test_governed_config_merge_records_undo_and_apply_previews(gov_home, target_read):
     """End-to-end: governed merge records a real undo token; undo_apply dry-run
     previews the inverse (config_replace back to the captured backup)."""

@@ -203,28 +203,43 @@ def config_replace(
 @mcp.tool()
 @governed_tool(risk_level="medium")
 @tool_errors("dict")
-def confirm_commit(target: Optional[str] = None) -> dict:
+def confirm_commit(dry_run: bool = False, target: Optional[str] = None) -> dict:
     """[WRITE] Confirm a pending commit-confirm change, cancelling its revert timer.
 
     The second half of the commit-confirm workflow. Run it only AFTER verifying
     the device is still reachable and healthy — doing nothing is the safe
     alternative, because the device then reverts on its own.
 
+    dry_run=True reads whether a commit-confirm is actually pending (nothing is
+    confirmed; the revert timer keeps running).
+
     Args:
+        dry_run: If True, report whether a pending commit exists without confirming.
         target: Device name from config.
     """
-    return ops.confirm_commit(_target(target))
+    tgt = _target(target)
+    if dry_run:
+        return ops.preview_confirm_commit(tgt)
+    return ops.confirm_commit(tgt)
 
 
 @mcp.tool()
 @governed_tool(risk_level="medium")
 @tool_errors("dict")
-def config_rollback(target: Optional[str] = None) -> dict:
+def config_rollback(dry_run: bool = False, target: Optional[str] = None) -> dict:
     """[WRITE] Revert the last committed change via NAPALM rollback(). No undo.
 
     Device support varies (rollback depth is platform-dependent).
 
+    dry_run=True cannot predict the resulting config without the device, so it
+    opens a session (verifying reachability) and reports a digest of the current
+    running config — the state rollback would replace — without rolling back.
+
     Args:
+        dry_run: If True, verify reachability and state what rollback would attempt.
         target: Device name from config.
     """
-    return ops.config_rollback(_target(target))
+    tgt = _target(target)
+    if dry_run:
+        return ops.preview_rollback(tgt)
+    return ops.config_rollback(tgt)

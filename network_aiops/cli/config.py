@@ -27,7 +27,6 @@ from network_aiops.cli._common import (
     cli_errors,
     double_confirm,
     dry_run_preview,
-    dry_run_print,
     get_manager,
     read_config_text,
 )
@@ -266,7 +265,19 @@ def config_confirm_cmd(
     """Confirm a pending commit-confirm change, cancelling its revert timer."""
     tgt = _resolve(target)
     if dry_run:
-        dry_run_print(operation="confirm_commit", detail=f"confirm pending commit on {tgt.name}")
+        # Routed through the governed twin so the preview READS whether a commit
+        # is actually pending, lands an audit row, and surfaces a refusal like
+        # any other governed call — not a static banner.
+        preview = gov.confirm_commit(target=target, dry_run=True)
+        params = (
+            {"hasPendingCommit": preview.get("hasPendingCommit")}
+            if isinstance(preview, dict)
+            else None
+        )
+        dry_run_preview(
+            preview, operation="confirm_commit",
+            detail=f"confirm pending commit on {tgt.name}", parameters=params,
+        )
         return
     result = _require_ok(gov.confirm_commit(target=target))
     if result.get("confirmed"):
@@ -284,8 +295,14 @@ def config_rollback_cmd(
     """Revert the last committed change (double confirm; device support varies)."""
     tgt = _resolve(target)
     if dry_run:
-        dry_run_print(operation="config_rollback", detail=f"rollback {tgt.name}")
+        # Routed through the governed twin: a rollback cannot know the prior
+        # config without the device, so the preview verifies reachability and
+        # plainly states what it will attempt — and, unlike the old static
+        # banner, lands an audit row and surfaces an unreachable device as a
+        # non-zero failure.
+        preview = gov.config_rollback(target=target, dry_run=True)
+        dry_run_preview(preview, operation="config_rollback", detail=f"rollback {tgt.name}")
         return
     double_confirm("rollback last commit on", tgt.name)
-    gov.config_rollback(target=target)
+    _require_ok(gov.config_rollback(target=target))
     console.print(f"[green]Rolled back the last commit on {tgt.name}[/]")

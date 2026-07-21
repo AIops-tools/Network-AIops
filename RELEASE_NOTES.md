@@ -1,33 +1,12 @@
-# Release notes — network-aiops 0.7.0
+# Release notes — network-aiops 0.8.0
 
-Previous release: 0.6.0.
+Previous release: 0.7.0.
 
-## BREAKING — the authorization layer is removed
+## Preview fidelity
 
-This tool no longer decides whether a write is permitted. Read-only mode
-(`<PREFIX>_READ_ONLY`), the graduated-approval / approver gate, and the
-`rules.yaml` deny engine are **all gone**. Whether an operation runs is the
-agent's judgement, or the permission of the account you connect it with — point
-it at a read-only credential and the write fails at the server, the place that
-actually owns the permission.
-
-What the tool guarantees instead is that **nothing is silent**: every operation,
-over MCP **and** the CLI alike, lands a row in the audit log — there is no
-unaudited entry point. Destructive writes still capture their before-state and
-record an undo token where a clean inverse exists.
-
-- If you set `<PREFIX>_READ_ONLY=1`, it now has **no effect** and the MCP server
-  logs a warning at startup. Restrict writes via the connecting account instead.
-- `<PREFIX>_AUDIT_APPROVED_BY` / `<PREFIX>_AUDIT_RATIONALE` still work, but are now
-  **optional audit annotations** — recorded on the row when set, never required.
-- The declared `risk_level` is carried into the audit row as a descriptive tier
-  (a label, not a gate).
-
-The governance harness is now: **audit (MCP+CLI, unbypassable) · runaway/budget
-safety guard · undo recording · output sanitize**. `policy.py` is a small
-risk-tier classifier; `governance/readonly.py` is deleted.
+A `--dry-run` should run the same guards as the real call and leave an audit row — the line's invariant is "a dry_run MAY read; it must never write." A few write commands still showed a hand-written banner that ran no guard and audited nothing. Those are now routed through the governed twin. The real writes were always guarded and audited; only the previews were blind.
 
 
-## Also in this tool
+### In this tool
 
-- **`config_backup` redacts credentials by default** — password/secret hashes, SNMP communities, PSKs, RADIUS/TACACS keys, across IOS/NX-OS/IOS-XR/EOS/Junos — so a full running-config no longer lands credential material in the agent transcript. `include_secrets=True` opts out; the CLI `-o` file still writes raw; the redaction count is reported (never silent); pushing a redacted backup is refused.
+- `config confirm` / `config rollback` dry-runs route through the governed twin: `confirm` reads whether a commit-confirm is pending; `rollback` opens the session (so an unreachable device fails, not a green banner), digests the current running config, and states plainly what it will do — all audited. No more static unaudited preview.

@@ -503,6 +503,70 @@ def _has_pending_commit(dev: Any) -> bool | None:
         return None
 
 
+def preview_confirm_commit(target: Any) -> dict:
+    """[READ / DRY-RUN] Report whether a commit-confirm is pending, without confirming.
+
+    Reads the same pending-commit signal ``confirm_commit`` branches on and
+    returns it. Nothing is confirmed and the revert timer is left running, so
+    the safe 'do nothing' path still lets the device self-heal.
+    """
+    from network_aiops.connection import device_session
+
+    with device_session(target) as dev:
+        pending = _has_pending_commit(dev)
+    if pending is False:
+        note = "No pending commit-confirm on this device — confirm would be a no-op."
+    elif pending is None:
+        note = (
+            "This driver cannot report pending-commit state; confirm would still "
+            "attempt to cancel any armed revert timer."
+        )
+    else:
+        note = (
+            "A commit-confirm is pending; confirm would cancel its revert timer and "
+            "make the change permanent."
+        )
+    return {
+        "name": s(target.name, 128),
+        "dryRun": True,
+        "action": "confirm_commit",
+        "hasPendingCommit": pending,
+        "committed": False,
+        "note": note,
+    }
+
+
+def preview_rollback(target: Any) -> dict:
+    """[READ / DRY-RUN] State what a rollback would attempt, verifying reachability.
+
+    NAPALM's ``rollback()`` reverts to the device's previous commit; the
+    resulting config cannot be predicted without the device and no undo is
+    recorded. So the honest preview opens a session (proving the device is
+    reachable and a rollback could run) and reports a DIGEST of the current
+    running config — the state a rollback would replace — WITHOUT rolling back.
+    The raw config never leaves the device: only its size and hash are returned.
+    """
+    from network_aiops.connection import device_session
+
+    with device_session(target) as dev:
+        raw = _running_config(dev)
+    return {
+        "name": s(target.name, 128),
+        "dryRun": True,
+        "action": "config_rollback",
+        "committed": False,
+        "current": {
+            "bytes": len(raw),
+            "sha256": hashlib.sha256(raw.encode("utf-8", "replace")).hexdigest(),
+        },
+        "note": (
+            "Would call NAPALM rollback() to revert the last commit — rollback depth "
+            "is device-dependent and no undo is recorded. The resulting config cannot "
+            "be predicted from here."
+        ),
+    }
+
+
 def config_rollback(target: Any) -> dict:
     """[WRITE] Revert the last committed change via NAPALM rollback().
 

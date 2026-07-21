@@ -57,19 +57,24 @@ def fake_device(monkeypatch):
 
 
 @pytest.mark.unit
-def test_cli_config_rollback_dry_run_short_circuits_before_any_governed_call(
+def test_cli_config_rollback_dry_run_reads_and_audits_but_never_rolls_back(
     gov_home, fake_device
 ):
-    """config_rollback has no dry_run parameter, so there is no governed preview
-    to route through — the CLI flag short-circuits client-side. Unlike merge /
-    replace this makes no call at all, so there is nothing to audit."""
+    """`config rollback --dry-run` now routes through the governed twin (was a
+    static client-side banner). A rollback cannot predict the prior config, so
+    the preview opens a session (verifying reachability + digesting the config
+    it would replace), audits, and never issues rollback()."""
     from network_aiops.cli import app
 
+    dev = fake_device.return_value
+    dev.get_config.return_value = {"running": "hostname core\n"}
+
     result = CliRunner().invoke(app, ["config", "rollback", "--dry-run"])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert "DRY-RUN" in result.output
-    fake_device.assert_not_called()  # no driver session was even opened
-    assert not (gov_home / "audit.db").exists()
+    dev.get_config.assert_called()  # it DID read: reachability + the state to replace
+    dev.rollback.assert_not_called()  # the one thing a dry-run may never do
+    assert _audit_tools(gov_home / "audit.db") == ["config_rollback"]
 
 
 @pytest.mark.unit
@@ -148,14 +153,24 @@ def test_cli_config_confirm_goes_through_governance(gov_home, fake_device):
 
 
 @pytest.mark.unit
-def test_cli_config_confirm_dry_run_opens_no_session(gov_home, fake_device):
+def test_cli_config_confirm_dry_run_reads_pending_and_audits_but_never_confirms(
+    gov_home, fake_device
+):
+    """`config confirm --dry-run` now routes through the governed twin (was a
+    static banner): it READS whether a commit-confirm is pending, audits, and
+    never cancels the revert timer."""
     from network_aiops.cli import app
+
+    dev = fake_device.return_value
+    dev.has_pending_commit.return_value = True
 
     result = CliRunner().invoke(app, ["config", "confirm", "--dry-run"])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert "DRY-RUN" in result.output
-    fake_device.assert_not_called()
+    dev.has_pending_commit.assert_called()  # it DID read the pending-commit state
+    dev.confirm_commit.assert_not_called()  # but never confirmed
+    assert _audit_tools(gov_home / "audit.db") == ["confirm_commit"]
 
 
 @pytest.mark.unit
