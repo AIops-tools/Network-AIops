@@ -126,6 +126,43 @@ def test_cli_undo_apply_dry_run_renders(gov_home):
 
 
 @pytest.mark.unit
+def test_cli_undo_apply_dry_run_refusal_exits_nonzero_without_a_banner(gov_home):
+    """A refused preview must fail like the apply would, not narrate a plan.
+
+    Before the reroute the ``.get('wouldApply', {})`` chain turned the refusal
+    dict into a green banner reading "inverse: ?" and exited 0 — the preview
+    disagreeing with the operation it previews.
+    """
+    from typer.testing import CliRunner
+
+    from network_aiops.cli import app
+
+    result = CliRunner().invoke(app, ["undo", "apply", "deadbeef", "--dry-run"])
+
+    assert result.exit_code == 1, result.output
+    assert "Unknown undo id" in result.output
+    assert "DRY-RUN" not in result.output
+    assert "inverse: ?" not in result.output
+
+
+@pytest.mark.unit
+def test_cli_undo_apply_dry_run_refusal_on_a_spent_token(gov_home):
+    """Single-use is enforced in the preview too, not only at apply time."""
+    from typer.testing import CliRunner
+
+    from network_aiops.cli import app
+
+    uid = _record()
+    gov.undo_apply(undo_id=uid)  # consume it
+
+    result = CliRunner().invoke(app, ["undo", "apply", uid, "--dry-run"])
+
+    assert result.exit_code == 1, result.output
+    assert "already 'applied'" in result.output
+    assert "DRY-RUN" not in result.output
+
+
+@pytest.mark.unit
 def test_undo_apply_audits_both_wrapper_and_inverse(gov_home):
     uid = _record()
     gov.undo_apply(undo_id=uid)

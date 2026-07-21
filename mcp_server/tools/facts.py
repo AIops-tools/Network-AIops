@@ -1,8 +1,8 @@
 """Read-only device facts MCP tools (NAPALM getters).
 
 Every tool is wrapped with ``@governed_tool`` (the network-aiops harness):
-policy pre-check, budget/runaway guard, graduated-autonomy risk-tier gate, and
-audit logging to ~/.network-aiops/audit.db. These are all READ tools (no undo).
+budget/runaway guard, risk-tier tagging, and audit logging to
+~/.network-aiops/audit.db. These are all READ tools (no undo).
 """
 
 from typing import Optional

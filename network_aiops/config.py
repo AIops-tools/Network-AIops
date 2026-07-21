@@ -29,6 +29,7 @@ from dotenv import load_dotenv
 from network_aiops.governance.paths import ops_home
 from network_aiops.secretstore import (
     NETBOX_TOKEN_NAME,
+    MasterPasswordError,
     SecretStoreError,
     get_secret,
     has_store,
@@ -97,6 +98,13 @@ def _resolve_password(name: str) -> str:
     if has_store():
         try:
             return get_secret(name)
+        except MasterPasswordError:
+            # A wrong or missing master password is NOT "this target has no
+            # secret". Falling through resurfaced it as a missing-credential
+            # error, sending the operator to add something already there.
+            # MasterPasswordError subclasses SecretStoreError, so the broad
+            # catch below would swallow it — re-raise first.
+            raise
         except SecretStoreError:
             pass  # fall through to legacy env var
     legacy = os.environ.get(password_env_var(name))
@@ -119,6 +127,13 @@ def _resolve_netbox_token() -> str:
     if has_store():
         try:
             return get_secret(NETBOX_TOKEN_NAME)
+        except MasterPasswordError:
+            # A wrong or missing master password is NOT "this target has no
+            # secret". Falling through resurfaced it as a missing-credential
+            # error, sending the operator to add something already there.
+            # MasterPasswordError subclasses SecretStoreError, so the broad
+            # catch below would swallow it — re-raise first.
+            raise
         except SecretStoreError:
             pass
     legacy = os.environ.get(NETBOX_TOKEN_ENV)

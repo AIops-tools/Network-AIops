@@ -5,6 +5,10 @@ default 300s): the device rolls the change back on its own unless
 ``network-aiops config confirm`` follows. That is the only guard that survives
 the change severing your own management path, so the workflow is
 merge/replace → check reachability → confirm.
+
+Config text printed to STDOUT has credential values masked; ``backup -o <path>``
+writes the file verbatim. The split is deliberate: stdout is what an agent
+driving this CLI reads, a path is what an operator chose.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from network_aiops.cli._common import (
     TargetOption,
     cli_errors,
     double_confirm,
+    dry_run_preview,
     dry_run_print,
     get_manager,
     read_config_text,
@@ -31,6 +36,17 @@ from network_aiops.ops.config_ops import DEFAULT_REVERT_IN
 
 config_app = typer.Typer(help="Device configuration operations.", no_args_is_help=True)
 console = Console()
+
+IncludeSecretsOption = Annotated[
+    bool,
+    typer.Option(
+        "--include-secrets",
+        help=(
+            "Print credential values verbatim instead of masking them. Ignored "
+            "with -o, which always writes the raw config to the file."
+        ),
+    ),
+]
 
 RevertInOption = Annotated[
     int,
@@ -61,6 +77,47 @@ def _require_ok(result: dict) -> dict:
     return result
 
 
+def _print_redaction(result: dict) -> None:
+    """Say out loud that the text above was altered, and how to get it verbatim.
+
+    The JSON carries a ``redaction`` block, but a human scrolling a 3000-line
+    config will not scroll back for it — and neither will a model summarising
+    the terminal. Redaction that the reader cannot notice is the silent
+    transformation this line treats as a defect, so it gets its own last line.
+    """
+    redaction = result.get("redaction") or {}
+    if not redaction.get("applied"):
+        return
+    count = redaction.get("linesRedacted") or 0
+    if count:
+        console.print(
+            f"[yellow]… {count} line(s) had credential values masked as "
+            f"'<redacted>'. Use -o <path> to save the raw config to a file, or "
+            f"--include-secrets to print it here.[/]"
+        )
+    else:
+        console.print(
+            "[dim]… no credential lines matched. Redaction is pattern-based and "
+            "cannot see multi-line key blocks, so this is not proof of none.[/]"
+        )
+
+
+def _preview_params(result: dict) -> dict:
+    """Banner params taken from the GOVERNED preview, not guessed by the CLI.
+
+    ``wouldArmTimer`` is the device-side answer (the driver's ``commit_config``
+    signature was actually probed), so this reports what the commit would do
+    rather than what the flags asked for — the two differ on drivers that
+    cannot arm a revert timer.
+    """
+    commit = result.get("commit") or {}
+    return {
+        "mode": result.get("mode"),
+        "safetyNet": commit.get("safetyNet"),
+        "revertInSeconds": commit.get("revertInSeconds"),
+    }
+
+
 def _print_preview(result: dict) -> None:
     """Echo a dry-run: the diff plus whether the real commit would have a net.
 
@@ -68,6 +125,7 @@ def _print_preview(result: dict) -> None:
     means the commit would not be refused.
     """
     console.print(result["diff"] or "[dim](no changes)[/]")
+    _print_redaction(result)
     commit = result.get("commit") or {}
     if commit.get("warning"):
         console.print(f"[bold red]{commit['warning']}[/]")
@@ -81,6 +139,7 @@ def _print_preview(result: dict) -> None:
 def _print_commit(result: dict) -> None:
     """Echo the diff plus how the commit was actually made (timer or not)."""
     console.print(result["diff"] or "[dim](no changes)[/]")
+    _print_redaction(result)
     commit = result.get("commit") or {}
     if commit.get("warning"):
         console.print(f"[bold red]{commit['warning']}[/]")
@@ -90,14 +149,33 @@ def _print_commit(result: dict) -> None:
 
 @config_app.command("backup")
 @cli_errors
-def config_backup_cmd(target: TargetOption = None, output: OutputOption = None) -> None:
-    """Fetch the running config (optionally save it to a file with -o)."""
-    result = config_ops.config_backup(_resolve(target))
+def config_backup_cmd(
+    target: TargetOption = None,
+    output: OutputOption = None,
+    include_secrets: IncludeSecretsOption = False,
+) -> None:
+    """Fetch the running config (raw to a file with -o; credentials masked on stdout).
+
+    The two sinks are treated differently ON PURPOSE. ``-o <path>`` writes the
+    verbatim config, because a backup with its keys stripped out is not a backup
+    — and the operator named that file, so they chose where it lands. stdout
+    masks credentials by default, because stdout is where an agent driving this
+    CLI reads from, and that is a context the operator did not choose. Pass
+    ``--include-secrets`` to print raw anyway.
+    """
+    raw_wanted = output is not None or include_secrets
+    result = config_ops.config_backup(_resolve(target), include_secrets=raw_wanted)
     if output is not None:
         Path(output).write_text(result["config"])
         console.print(f"[green]Saved running config of {result['name']} -> {output}[/]")
-    else:
-        console.print(result["config"])
+        console.print(
+            f"[yellow]{output} holds the RAW config — credential hashes, SNMP "
+            f"communities, PSKs and RADIUS/TACACS keys included. Store it "
+            f"accordingly.[/]"
+        )
+        return
+    console.print(result["config"])
+    _print_redaction(result)
 
 
 @config_app.command("diff")
@@ -106,12 +184,19 @@ def config_diff_cmd(
     config_file: Path,
     target: TargetOption = None,
     replace: bool = typer.Option(False, "--replace", help="Diff as a full replace"),
+    include_secrets: IncludeSecretsOption = False,
 ) -> None:
-    """Dry-run: show the diff a config file would produce (nothing is committed)."""
+    """Dry-run: show the diff a config file would produce (nothing is committed).
+
+    Credential values in the diff are masked unless --include-secrets is passed.
+    """
     text = read_config_text(config_file)
-    result = config_ops.config_diff(_resolve(target), text, replace=replace)
+    result = config_ops.config_diff(
+        _resolve(target), text, replace=replace, include_secrets=include_secrets
+    )
     console.print(f"[bold]Diff ({result['mode']}, not committed):[/]")
     console.print(result["diff"] or "[dim](no changes)[/]")
+    _print_redaction(result)
 
 
 @config_app.command("merge")
@@ -126,13 +211,18 @@ def config_merge_cmd(
     text = read_config_text(config_file)
     tgt = _resolve(target)
     if dry_run:
-        dry_run_print(operation="config_merge", detail=f"merge into {tgt.name}")
         # Through the GOVERNED twin, not the ops layer: the preview then runs the
-        # same guard AND lands the same audit row as any other governed call.
-        _print_preview(_require_ok(
-            gov.config_merge(config_text=text, target=target, revert_in=revert_in,
-                             dry_run=True)
-        ))
+        # same guard AND lands the same audit row as any other governed call. The
+        # call comes BEFORE the banner so a refusal is never preceded by a green
+        # "no changes will be committed" header it then contradicts.
+        preview = gov.config_merge(
+            config_text=text, target=target, revert_in=revert_in, dry_run=True
+        )
+        dry_run_preview(
+            preview, operation="config_merge", detail=f"merge into {tgt.name}",
+            parameters=_preview_params(preview),
+        )
+        _print_preview(preview)
         return
     double_confirm("merge config into", tgt.name)
     result = _require_ok(gov.config_merge(config_text=text, target=target, revert_in=revert_in))
@@ -152,11 +242,14 @@ def config_replace_cmd(
     text = read_config_text(config_file)
     tgt = _resolve(target)
     if dry_run:
-        dry_run_print(operation="config_replace", detail=f"replace config of {tgt.name}")
-        _print_preview(_require_ok(
-            gov.config_replace(config_text=text, target=target, revert_in=revert_in,
-                               dry_run=True)
-        ))
+        preview = gov.config_replace(
+            config_text=text, target=target, revert_in=revert_in, dry_run=True
+        )
+        dry_run_preview(
+            preview, operation="config_replace", detail=f"replace config of {tgt.name}",
+            parameters=_preview_params(preview),
+        )
+        _print_preview(preview)
         return
     double_confirm("REPLACE config of", tgt.name)
     result = _require_ok(gov.config_replace(config_text=text, target=target, revert_in=revert_in))

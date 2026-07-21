@@ -90,20 +90,12 @@ def test_secret_lands_encrypted_not_in_config(isolated_home, fake_getpass):
     assert ss.SecretStore.unlock(MASTER_PW).get("core-sw1") == "device-pw-123"
 
 
-def test_rules_yaml_seeded_with_approver_tier(isolated_home, fake_getpass):
-    _run_init(HAPPY_ANSWERS)
-
-    rules = (isolated_home / "rules.yaml").read_text("utf-8")
-    assert "high-risk-requires-approver" in rules
-    assert "risk_tiers" in rules
-
-
-def test_rerun_does_not_clobber_existing_rules(isolated_home, fake_getpass):
-    (isolated_home / "rules.yaml").write_text("# operator-authored\n", "utf-8")
-    answers = ["edge-r1", "junos", "192.0.2.20", "admin", "", "", "n", "n", "n", "n"]
-    result = _run_init(answers)
+def test_init_writes_no_policy_rules(isolated_home, fake_getpass):
+    """The skill no longer authorizes, so init seeds no rules.yaml — a fresh
+    install delivers full functionality and leaves permission to the account."""
+    result = _run_init(HAPPY_ANSWERS)
     assert result.exit_code == 0, result.output
-    assert (isolated_home / "rules.yaml").read_text("utf-8") == "# operator-authored\n"
+    assert not (isolated_home / "rules.yaml").exists()
 
 
 def test_driver_defaults_to_ios_on_enter(isolated_home, fake_getpass):

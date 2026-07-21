@@ -16,12 +16,11 @@ plane with it, and the model cannot SSH back in to fix what it broke.
 
 | You might be tempted to prompt | Why you don't need to |
 |---|---|
-| "Work read-only, never change any config" | Set `NETWORK_READ_ONLY=1`. The five write tools (`config_merge`, `config_replace`, `confirm_commit`, `config_rollback`, `undo_apply`) are then **not registered at all** — 33 tools become 28, they never appear in the tool list, so the model cannot call one even if it tries. The `@governed_tool` harness independently refuses non-read calls, so the CLI is covered too. |
 | "Don't invent a value when a field is missing" | A field the driver did not return comes back as `null`, never as `""`. This is the norm, not the exception, on a multi-vendor fleet: `serial_number`, `model`, an interface `description`, an LLDP neighbour's `hostname` are all optional and driver-dependent. Absent and empty are distinguishable in the payload. |
 | "Tell me if the output was cut off" | The NetBox listings return `{"devices": [...], "returned": N, "limit": L, "truncated": true/false}` (and `{"interfaces": ...}` likewise). Truncation is measured — one extra record is fetched — not guessed from a length coincidence. |
 | "Preserve the ordering / tell me what's most urgent" | `interface_health_rca` and `bgp_neighbor_rca` findings carry an explicit 1-based `rank`, worst-first, and each cites the measured number that tripped it (`rx_errors+tx_errors = 412 >= 100`). Priority is in the payload, not implied by list position. |
 | "Show me the diff before you commit anything" | `config_diff` is a real dry run: it stages a candidate, returns `compare_config()` output, then always discards. Nothing is committed, and the response carries `"committed": false`. |
-| "Confirm before anything destructive" | `config_replace` is `high` risk and requires a named approver (`NETWORK_AUDIT_APPROVED_BY`) — secure-by-default, so with no `rules.yaml` the call is refused outright without one. The CLI write paths additionally require a double confirmation. |
+| "Confirm before anything destructive" | The CLI write paths (`config merge`/`replace`/`rollback`) require a double confirmation, and every write supports `--dry-run` / `dry_run=True` to preview first. `config_replace` is `high` risk, carried into the audit row as a `review` tier so it stands out in the trail. |
 | "Keep a copy of the old config so we can go back" | `config_merge` and `config_replace` read the running config **before** touching the device and return it as `backup`, and the harness records an undo descriptor that restores it via `config_replace`. The before-state is captured, not reconstructed. |
 | "Log what you did" | Every governed call is audited to `~/.network-aiops/audit.db` regardless of what the model says it did. |
 | "Never show me passwords or SNMP communities" | `get_users` returns `has_password` (a boolean) instead of the hash; `get_snmp_information` returns `community_count` instead of the community strings. The secrets are not in the payload to leak. |
@@ -71,7 +70,10 @@ CONFIG CHANGES
   interface, AAA, and your own access. Never pass a partial config to
   config_replace.
 - Never generate a full replacement config from scratch. Start from the output
-  of config_backup and edit that.
+  of config_backup and edit that — but call it with `include_secrets=True`
+  for that purpose, or the `<redacted>` placeholders become literal
+  passwords on the device. Better still, take the backup with the CLI's
+  `-o <path>` and edit the file.
 - config_rollback reverts the last commit only, and rollback depth is
   device-dependent — treat it as a single shot, not an undo history.
 - Never change more than one device per confirmed request.
@@ -96,16 +98,21 @@ SCOPE
 ## Recommended setup for a local model
 
 ```bash
-# Read-only until you trust the setup — this is enforced, not advisory.
-export NETWORK_READ_ONLY=1
 network-aiops doctor
 ```
 
-Then, when you are ready to allow config writes, unset it and set an approver so
-the high-risk tier has an accountable name on it:
+Authorization is not this tool's job — decide it via the account or the agent's
+prompt, not a switch in the skill. The safest posture while you build trust is to
+connect with a **device account that has read-only privileges** (and a read-only
+NetBox API token): a write then fails at the device itself, the place that
+actually owns the permission, no matter what the model attempts. When you are
+ready to allow config changes, connect with an account that can write.
+
+`NETWORK_AUDIT_APPROVED_BY` / `NETWORK_AUDIT_RATIONALE` are optional annotations —
+they record who asked for a change and why on the audit row, but they never block
+a call:
 
 ```bash
-unset NETWORK_READ_ONLY
 export NETWORK_AUDIT_APPROVED_BY="your.name@example.com"
 export NETWORK_AUDIT_RATIONALE="change window CHG-1234, 2026-07-20"
 ```
@@ -119,8 +126,9 @@ applied. `load_merge_candidate` (behind `config_merge`) is additive. Whereas
 *equal* your text — every line you omitted is removed. On Junos this is a
 `load override`; on IOS-XR a `commit replace`; on EOS/IOS the driver synthesises
 it. A model that treats replace like merge will drop the management VRF and lock
-you out. `config_replace` is `high` risk and approver-gated for exactly this
-reason, and both writes return the pre-change running config as `backup`.
+you out. `config_replace` is `high` risk — recorded as a `review` tier in the
+audit trail for exactly this reason — and both writes return the pre-change
+running config as `backup`.
 
 **The commit / rollback path is device-dependent.** `commit_config()` applies the
 candidate; `config_rollback` calls NAPALM's `rollback()`, which reverts the last
@@ -163,9 +171,9 @@ Some behaviours are model-capacity limits rather than prompt problems:
   `get_interfaces` on a chassis switch is hundreds of rows. Ask narrower
   questions, and use `--limit` deliberately on the NetBox listings rather than
   pulling whole inventories.
-- **The model edits config it was only asked to read.** Run with
-  `NETWORK_READ_ONLY=1` and give it `config_backup` + `config_diff` only; hand
-  the diff to a human for the commit.
+- **The model edits config it was only asked to read.** Connect with a read-only
+  device account so writes fail at the device, and lean on `config_backup` +
+  `config_diff` (both reads); hand the diff to a human for the commit.
 - **The model describes calls instead of making them.** This is usually a
   runtime/tool-calling-format mismatch, not a prompt problem — check that your
   client advertises the tools in the format your model was trained on.

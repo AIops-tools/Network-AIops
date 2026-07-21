@@ -1,7 +1,7 @@
 """Read-only neighbor-detail MCP tools (BGP / LLDP).
 
 Every tool is wrapped with ``@governed_tool`` (the network-aiops harness):
-policy pre-check, budget/runaway guard, risk-tier gate, and audit logging to
+budget/runaway guard, risk-tier tagging, and audit logging to
 ~/.network-aiops/audit.db. These are all READ tools (no undo).
 """
 

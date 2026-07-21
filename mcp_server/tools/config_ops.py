@@ -1,7 +1,7 @@
 """Config MCP tools: backup + diff (read/dry-run), merge/replace/confirm/rollback (write).
 
 Every tool is wrapped with ``@governed_tool`` (the network-aiops harness):
-policy pre-check, budget/runaway guard, risk-tier gate, audit logging to
+budget/runaway guard, risk-tier tagging, audit logging to
 ~/.network-aiops/audit.db, and undo-token recording.
 
 ``config_merge`` and ``config_replace`` commit under a device-side revert timer
@@ -11,6 +11,13 @@ NOT through the result — a running config carries credential hashes, SNMP
 communities and PSKs, and a tool result goes straight into an agent transcript.
 ``_restore_undo`` reads it back from that stash and builds a
 ``config_replace``-to-backup inverse. ``config_rollback`` records no undo.
+
+``config_backup`` cannot withhold the config — returning it is the tool's
+contract — so it masks credential VALUES instead and takes ``include_secrets``
+to opt back in. Every ``diff`` gets the same treatment, because a diff that adds
+``snmp-server community X`` carries X. The masking is always reported in a
+``redaction`` block: a transformation the caller cannot detect is worse than
+none, since it silently changes what "I read the config" means.
 """
 
 from typing import Optional
@@ -58,31 +65,59 @@ def _restore_undo(params: dict, result) -> Optional[dict]:
 @mcp.tool()
 @governed_tool(risk_level="low")
 @tool_errors("dict")
-def config_backup(target: Optional[str] = None) -> dict:
-    """[READ] Return the device running config (a note explains how to save it).
+def config_backup(include_secrets: bool = False, target: Optional[str] = None) -> dict:
+    """[READ] Return the device running config, credential values masked by default.
+
+    Password/secret hashes, SNMP communities, SNMPv3 auth+priv keys, IKE
+    pre-shared keys and RADIUS/TACACS/keychain keys are replaced with
+    "<redacted>"; every other line comes back untouched, so interface, routing
+    and policy config reads exactly as the device wrote it.
+
+    The result always carries a "redaction" block saying how many lines were
+    changed. Redaction is pattern-based across five vendor syntaxes, so it
+    REDUCES exposure rather than guaranteeing none remains — in particular it
+    cannot see multi-line PKI key blocks.
+
+    Prefer the CLI's '-o <path>' flag over include_secrets when a human needs
+    the real config: it writes the raw text to a file instead of into this
+    transcript.
 
     Args:
+        include_secrets: True to return the verbatim config, credentials and
+            all. Every secret in it then lives wherever this result is stored.
         target: Device name from config; omit to use the default device.
     """
-    return ops.config_backup(_target(target))
+    return ops.config_backup(_target(target), include_secrets=include_secrets)
 
 
 @mcp.tool()
 @governed_tool(risk_level="low")
 @tool_errors("dict")
 def config_diff(
-    config_text: str, replace: bool = False, target: Optional[str] = None
+    config_text: str,
+    replace: bool = False,
+    include_secrets: bool = False,
+    target: Optional[str] = None,
 ) -> dict:
     """[READ] DRY-RUN: stage a candidate, return the diff, then discard it.
 
     Nothing is committed. This is the dry-run primitive for previewing a change.
 
+    The diff is credential-redacted like config_backup, and for the same reason:
+    a diff that ADDS 'snmp-server community X' contains X, and one that removes
+    a line quotes the credential the device already had. The result carries a
+    "redaction" block with the count.
+
     Args:
         config_text: The configuration snippet (merge) or full config (replace).
         replace: True to diff as a full-config replacement; False (default) to merge.
+        include_secrets: True to return the verbatim diff — use when verifying
+            that the literal key you are pushing is the one that will land.
         target: Device name from config.
     """
-    return ops.config_diff(_target(target), config_text, replace=replace)
+    return ops.config_diff(
+        _target(target), config_text, replace=replace, include_secrets=include_secrets
+    )
 
 
 @mcp.tool()
@@ -104,7 +139,9 @@ def config_merge(
 
     Returns ``diff`` and a ``backup`` digest (size + sha256). The full config is
     deliberately NOT returned — it carries credential hashes and PSKs — but the
-    raw text is retained in undo.db for the recorded rollback.
+    raw text is retained in undo.db for the recorded rollback. The ``diff`` is
+    credential-redacted with no opt-out (see the ``redaction`` block); use
+    config_diff(include_secrets=True) first if you must verify a literal key.
 
     dry_run=True stages the candidate, returns the diff, discards it, and runs
     the SAME refusal the real commit would — so a green preview is never
@@ -141,7 +178,10 @@ def config_replace(
     armed the change is permanent on landing.
 
     Returns ``diff`` and a ``backup`` digest; the raw pre-change config is kept
-    in undo.db (0600) for the recorded rollback, not echoed back here.
+    in undo.db (0600) for the recorded rollback, not echoed back here. The
+    ``diff`` is credential-redacted with no opt-out (see the ``redaction``
+    block); use config_diff(include_secrets=True) first if you must verify a
+    literal key.
 
     dry_run=True previews the diff and runs the same refusal the real commit
     would, so the preview can never disagree with the commit.

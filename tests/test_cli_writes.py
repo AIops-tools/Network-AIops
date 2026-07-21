@@ -174,6 +174,11 @@ def test_cli_merge_dry_run_refuses_when_the_real_call_would(gov_home, fake_devic
 
     assert result.exit_code != 0
     assert "irreversible" in result.output
+    assert "DRY-RUN" not in result.output, (
+        "a refused preview must not be introduced by a green 'no changes will be "
+        "committed' banner it then contradicts — a weak model reads the banner as "
+        "the answer and the refusal as transient"
+    )
     dev.commit_config.assert_not_called()
     assert _audit_tools(gov_home / "audit.db") == ["config_merge"], (
         "the refused preview is still an audited governed call"
@@ -205,3 +210,51 @@ def test_cli_merge_dry_run_reads_and_audits_but_never_commits(gov_home, fake_dev
     assert "DRY-RUN" in result.output, "the human-readable banner must survive"
     dev.commit_config.assert_not_called(), "the one thing a dry-run may never do"
     assert _audit_tools(gov_home / "audit.db") == ["config_merge"]
+
+
+@pytest.mark.unit
+def test_cli_merge_dry_run_banner_reports_the_governed_answer_not_the_flag(
+    gov_home, fake_device, tmp_path
+):
+    """Banner params come from the preview result, so they describe what the
+    commit WOULD do — not what the flags asked for. A driver that cannot arm a
+    revert timer must say 'undo-only' here even though --revert-in was 300."""
+    from network_aiops.cli import app
+
+    dev = fake_device.return_value
+    dev.get_config.return_value = {"running": "hostname old\n"}
+    dev.compare_config.return_value = "+ ntp server 10.0.0.99"
+
+    # A driver whose commit_config takes no revert_in: no timer is possible.
+    def _commit(message=""):
+        raise AssertionError("a preview must never commit")
+
+    dev.commit_config = _commit
+    cfg = tmp_path / "change.cfg"
+    cfg.write_text("ntp server 10.0.0.99\n")
+
+    result = CliRunner().invoke(app, ["config", "merge", str(cfg), "--dry-run"])
+
+    assert result.exit_code == 0, result.output
+    assert "safetyNet = undo-only" in result.output
+    assert "mode = merge" in result.output
+
+
+# ── refusals must teach, not traceback ────────────────────────────────────────
+#
+# ``PolicyDenied``/``BudgetExceeded`` are raised by ``@governed_tool`` OUTSIDE the
+# tool body, so ``tool_errors`` never flattens them into ``{"error": ...}`` and
+# ``dry_run_preview``'s dict check cannot see them. Before they were listed in
+# ``_cli_error_types`` a refused preview reached the operator as a raw traceback:
+# the teaching text was in there, buried under a stack dump. A weak model reads
+# that as a crash and retries — the very loop the preview reroute exists to stop.
+
+
+def test_cli_error_types_covers_governance_refusals() -> None:
+    """A governance refusal must be translated, not dumped as a traceback."""
+    from network_aiops.cli._common import _cli_error_types
+    from network_aiops.governance import BudgetExceeded, PolicyDenied
+
+    types = _cli_error_types()
+    assert PolicyDenied in types
+    assert BudgetExceeded in types

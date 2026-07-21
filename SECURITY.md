@@ -43,8 +43,10 @@ SNMP community strings.
 ### Destructive Operation Safety
 
 Config write operations (merge, replace, rollback) all pass through the bundled
-`@governed_tool` decorator: policy pre-check, token / runaway budget guard,
-graduated-autonomy risk-tier gate, and audit logging. The CLI layer additionally
+`@governed_tool` decorator: token / runaway budget guard, risk-tier tagging on the
+audit row, and audit logging. The decorator does not authorize the write — that is
+the agent's judgement or the privilege of the connecting device account (use a
+read-only login and writes fail at the device). The CLI layer additionally
 requires double confirmation and supports `--dry-run` (which prints the diff
 without committing) for `config merge`, `config replace`, and `config rollback`.
 `config_merge` and `config_replace` capture the pre-change running config and

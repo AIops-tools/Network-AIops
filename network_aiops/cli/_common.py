@@ -29,10 +29,18 @@ OutputOption = Annotated[
 
 
 def _cli_error_types() -> tuple[type[BaseException], ...]:
-    """Exceptions translated to a one-line teaching error instead of a traceback."""
-    from network_aiops.connection import NetworkApiError
+    """Exceptions translated to a one-line teaching error instead of a traceback.
 
-    return (NetworkApiError, KeyError, OSError, ValueError)
+    ``PolicyDenied``/``BudgetExceeded`` are raised by ``@governed_tool`` OUTSIDE
+    the tool body, so ``tool_errors`` never sees them and they never arrive as
+    an ``{"error": ...}`` dict. Their message is the teaching text (which
+    approver to set, which budget was hit) — without them here a refusal
+    reaches the CLI as a traceback instead.
+    """
+    from network_aiops.connection import NetworkApiError
+    from network_aiops.governance import BudgetExceeded, PolicyDenied
+
+    return (NetworkApiError, PolicyDenied, BudgetExceeded, KeyError, OSError, ValueError)
 
 
 def cli_errors(fn: Callable) -> Callable:
@@ -75,6 +83,28 @@ def dry_run_print(*, operation: str, detail: str, parameters: dict | None = None
     for k, v in (parameters or {}).items():
         console.print(f"[magenta]  Param:     {k} = {v}[/]")
     console.print("[magenta]  Run without --dry-run to commit.[/]\n")
+
+
+def dry_run_preview(
+    preview: Any, *, operation: str, detail: str, parameters: dict | None = None
+) -> None:
+    """Render a GOVERNED dry-run result as the human-readable DRY-RUN banner.
+
+    ``preview`` must come from calling the governed tool with ``dry_run=True``,
+    so every guard it carries has already run against the real target. A refusal
+    arrives as ``{"error": ...}`` (``tool_errors`` flattens the exception) — it is
+    printed like any other CLI error and exits non-zero, exactly as the real
+    write would. Printing a green banner for a call that is about to be refused
+    is the preview being wrong, not merely incomplete.
+
+    On the allowed path the banner is byte-for-byte what it always was: routing
+    through the governed call buys the guard and the audit row, not a new
+    serialization.
+    """
+    if isinstance(preview, dict) and preview.get("error"):
+        console.print(f"[red]Error: {preview['error']}[/]")
+        raise typer.Exit(1)
+    dry_run_print(operation=operation, detail=detail, parameters=parameters)
 
 
 def double_confirm(action: str, resource: str) -> None:

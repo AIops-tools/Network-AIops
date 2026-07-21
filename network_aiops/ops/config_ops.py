@@ -37,6 +37,24 @@ A running config carries credential hashes, SNMP communities, PSKs and RADIUS
 keys, and a tool result goes straight into an agent transcript — so the caller
 gets a digest (size + SHA-256 + whether an undo copy was retained) instead. Only
 the diff, which is what the operator actually asked about, is echoed back.
+
+**Credential redaction.** Withholding the config is not an option for
+``config_backup``: returning it IS that tool's contract, and reading interface
+or routing config is the point of the tool. So the config comes back with
+credential VALUES masked (see :mod:`network_aiops.ops.redact`) and an explicit
+``include_secrets=True`` returns the verbatim text. The same masking is applied
+to every ``diff`` echoed back, because a diff that ADDS
+``snmp-server community X`` contains X just as surely as the config does.
+
+The redaction is always REPORTED — ``redaction.linesRedacted`` plus a note
+saying ``include_secrets`` exists. A transformation the caller cannot detect is
+worse than no transformation, because it turns "I read the config" into a claim
+the caller has no way to qualify.
+
+The CLI's ``-o <path>`` flag is deliberately exempt and writes the RAW config.
+A file the operator named is not a model's context window; that distinction is
+the entire point of the redaction, so the escape hatch has to exist where the
+operator already chose the sink.
 """
 
 from __future__ import annotations
@@ -48,6 +66,7 @@ from typing import Any
 
 from network_aiops.governance import capture_prior_state
 from network_aiops.ops._shared import s
+from network_aiops.ops.redact import PLACEHOLDER, redact_config, redaction_note
 
 _log = logging.getLogger("network-aiops.config")
 
@@ -69,12 +88,44 @@ _BACKUP_NOTE = (
     "Full pre-change config withheld from this result: it contains credential "
     "hashes, SNMP communities, PSKs and RADIUS keys. The complete raw text is "
     "retained in undo.db (0600) for the recorded rollback. Use config_backup "
-    "if you deliberately want the text."
+    "if you deliberately want the text — it masks credential values by default, "
+    "and takes include_secrets=True when you really need them."
 )
 
 
 class UnreversibleCommit(ValueError):  # noqa: N818 — teaching error, reads as a statement
     """Refused: the commit would have neither a revert timer nor a usable undo."""
+
+
+class RedactedConfigPush(ValueError):  # noqa: N818 — teaching error, reads as a statement
+    """Refused: the candidate config still carries redaction placeholders."""
+
+
+def guard_redacted_push(config_text: str) -> None:
+    """Refuse a candidate config that still contains ``<redacted>`` placeholders.
+
+    A hazard created by the redaction itself, so it ships with it. The obvious
+    way to build a replacement config is "back it up, edit it, push it" — and a
+    backup is now masked by default. Pushing that text back does not restore the
+    credentials; it sets them to the literal string ``<redacted>``, changing
+    every password, community and pre-shared key on the device to a known value.
+    The device accepts it happily, and the diff looks like a successful edit.
+
+    Called by the write path AND by ``config_preview``/``config_diff``, so the
+    dry-run cannot come back green for a push that is about to be refused.
+    """
+    if PLACEHOLDER not in (config_text or ""):
+        return
+    raise RedactedConfigPush(
+        f"Refusing to push this config: it still contains '{PLACEHOLDER}' "
+        f"placeholders from a redacted backup. Pushing them would not restore the "
+        f"original credentials — it would SET every affected password, SNMP "
+        f"community and pre-shared key to the literal string '{PLACEHOLDER}'. "
+        f"Re-take the backup with include_secrets=True (or the CLI's "
+        f"'config backup -o <path>', which always writes raw), edit that, and push "
+        f"it. If you genuinely mean to set a credential to this value, change it "
+        f"to any other string."
+    )
 
 
 def _running_config(dev: Any) -> str:
@@ -191,28 +242,63 @@ def _commit(dev: Any, *, revert_in: int, raw: str) -> dict | None:
     )
 
 
-def config_backup(target: Any) -> dict:
-    """[READ] Return the device running config. Save to a file with the CLI '-o'."""
+def _redacted(text: str | None, *, include_secrets: bool) -> tuple[str, dict]:
+    """Return (caller-safe text, the block describing what redaction did to it).
+
+    Always returns the descriptor, including when nothing was redacted and when
+    redaction was skipped — the caller must be able to tell which of the three
+    it is holding without inferring it from the text.
+    """
+    if include_secrets:
+        body, count = text or "", 0
+    else:
+        body, count = redact_config(text)
+    return sanitize_config(body), {
+        "applied": not include_secrets,
+        "linesRedacted": count,
+        "note": redaction_note(count, applied=not include_secrets),
+    }
+
+
+def config_backup(target: Any, *, include_secrets: bool = False) -> dict:
+    """[READ] Return the device running config, credential values masked by default.
+
+    ``include_secrets=True`` returns the verbatim text — every credential in it
+    then lives wherever this result is stored. The CLI's ``-o <path>`` flag is
+    the other way to get raw text, and the better one: it writes to a file the
+    operator chose instead of into the caller's context.
+    """
     from network_aiops.connection import device_session
 
     with device_session(target) as dev:
         running = _running_config(dev)
+    config, redaction = _redacted(running, include_secrets=include_secrets)
     return {
         "name": s(target.name, 128),
-        "config": sanitize_config(running),
+        "config": config,
+        "redaction": redaction,
         "note": "Running config. Use the CLI '-o <path>' flag to save it to a file.",
     }
 
 
-def config_diff(target: Any, config_text: str, replace: bool = False) -> dict:
+def config_diff(
+    target: Any, config_text: str, replace: bool = False, *, include_secrets: bool = False
+) -> dict:
     """[READ / DRY-RUN] Stage a candidate, return the diff, then discard it.
 
     This is the dry-run primitive: nothing is committed. ``replace=False`` uses
     a merge candidate (additive); ``replace=True`` uses a replace candidate
     (the diff reflects a full-config replacement).
+
+    The diff is redacted like a backup is: a diff that adds
+    ``snmp-server community X`` contains X, and a diff that REMOVES a line
+    quotes the credential the device already had. ``include_secrets=True``
+    returns it verbatim — needed when you are verifying that your own change
+    landed with the right key.
     """
     from network_aiops.connection import device_session
 
+    guard_redacted_push(config_text)
     with device_session(target) as dev:
         if replace:
             dev.load_replace_candidate(config=config_text)
@@ -222,10 +308,12 @@ def config_diff(target: Any, config_text: str, replace: bool = False) -> dict:
             diff = dev.compare_config()
         finally:
             dev.discard_config()
+    body, redaction = _redacted(diff, include_secrets=include_secrets)
     return {
         "name": s(target.name, 128),
         "mode": "replace" if replace else "merge",
-        "diff": sanitize_config(diff),
+        "diff": body,
+        "redaction": redaction,
         "committed": False,
         "note": "Dry-run only — no changes were committed.",
     }
@@ -253,6 +341,7 @@ def config_preview(target: Any, config_text: str, *, replace: bool, revert_in: i
     from network_aiops.connection import device_session
 
     action = "replace the config of" if replace else "merge config into"
+    guard_redacted_push(config_text)
     with device_session(target) as dev:
         raw = _running_config(dev)
         retained = _is_retainable(raw)
@@ -267,11 +356,13 @@ def config_preview(target: Any, config_text: str, *, replace: bool, revert_in: i
             dev.discard_config()
     if not timer_likely and not retained:
         _refuse_unreversible(action, raw)
+    body, redaction = _redacted(diff, include_secrets=False)
     return {
         "name": s(target.name, 128),
         "dryRun": True,
         "mode": "replace" if replace else "merge",
-        "diff": sanitize_config(diff),
+        "diff": body,
+        "redaction": redaction,
         "committed": False,
         "backup": _backup_digest(raw, retained),
         "commit": {
@@ -308,6 +399,7 @@ def _write_config(target: Any, config_text: str, *, replace: bool, revert_in: in
     from network_aiops.connection import device_session
 
     action = "replace the config of" if replace else "merge config into"
+    guard_redacted_push(config_text)
     with device_session(target) as dev:
         raw = _running_config(dev)
         retained = _is_retainable(raw)
@@ -328,11 +420,13 @@ def _write_config(target: Any, config_text: str, *, replace: bool, revert_in: in
             _discard_quietly(dev)
     if commit is None:
         _refuse_unreversible(action, raw)
+    body, redaction = _redacted(diff, include_secrets=False)
     return {
         "name": s(target.name, 128),
         "action": "replaced" if replace else "merged",
         "committed": True,
-        "diff": sanitize_config(diff),
+        "diff": body,
+        "redaction": redaction,
         "backup": _backup_digest(raw, retained),
         "commit": commit,
     }
@@ -345,6 +439,11 @@ def config_merge(target: Any, config_text: str, revert_in: int = DEFAULT_REVERT_
     returns ``diff`` plus a ``backup`` digest — never the config body itself.
     ``commit`` reports whether a revert timer was actually armed; when it was,
     the change REVERTS on its own unless ``confirm_commit`` follows.
+
+    The ``diff`` is always credential-redacted, with no opt-out: a write's
+    receipt has no business being the way credentials leave the device. Use
+    ``config_diff(include_secrets=True)`` beforehand if you need to verify the
+    literal key you are pushing.
     """
     return _write_config(target, config_text, replace=False, revert_in=revert_in)
 

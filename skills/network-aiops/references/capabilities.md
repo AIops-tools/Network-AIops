@@ -31,8 +31,8 @@ are never returned (user password hashes and SNMP community strings are redacted
 | `device_health` | facts + interface up/down + environment + issues | low | ~120–400 |
 | `interface_health_rca` | worst-first findings: down / error / discard / flap, each cited | low | ~80–600 |
 | `bgp_neighbor_rca` | worst-first findings: down / shut / reset / route-less, each cited | low | ~60–500 |
-| `config_backup` | running config (sanitized, size-bounded) | low | ~500–8000 |
-| `config_diff` | candidate diff (dry-run, never committed) | low | ~30–1500 |
+| `config_backup` | running config, credential values masked (`include_secrets=True` for raw) | low | ~500–8000 |
+| `config_diff` | candidate diff, credential values masked (dry-run, never committed) | low | ~30–1500 |
 | `netbox_list_devices` | `{devices, returned, limit, truncated}` — name, role, site, status, primary IP | low | ~40–500 |
 | `netbox_get_device` | + device_type, serial | low | ~80 |
 | `netbox_device_interfaces` | `{interfaces, returned, limit, truncated}` — name, type, enabled, description | low | ~40–600 |
@@ -129,6 +129,24 @@ retainedForUndo}` — not the config body. A running config carries credential
 hashes, SNMP communities, PSKs and RADIUS keys, and a tool result lands in the
 agent transcript. The byte-exact raw text is kept only in `undo.db` (0600) for
 the rollback. Use `config_backup` when you deliberately want the text.
+
+### Credential values are masked, and the masking is reported
+
+`config_backup` cannot withhold the config — returning it IS the tool's
+contract — so it masks credential VALUES instead: password/secret hashes, SNMP
+communities, SNMPv3 auth/priv material, IKE pre-shared keys, RADIUS/TACACS and
+keychain keys become `<redacted>`. Every other line is byte-for-byte what the
+device said. The same applies to every `diff`, because a diff that adds
+`snmp-server community X` contains X.
+
+Each result carries a `redaction` block (`applied`, `linesRedacted`, `note`) so
+the transformation is never silent. `include_secrets=True` returns the verbatim
+text, and the CLI's `-o <path>` writes raw to a file the operator named.
+
+**Limit**: this is pattern matching over five vendor syntaxes. It REDUCES
+exposure; it does not guarantee the text is credential-free. Line-oriented
+rules cannot see multi-line PKI key blocks. Do not describe redacted output as
+"safe to share".
 
 ### `dry_run` does not bypass the guard
 
