@@ -3,12 +3,45 @@
 This document records what has and has not been validated against real network
 devices, so the maturity claim is auditable.
 
-## Current status ⚠️ mock-only
+## Current status — split by half
 
-`network-aiops` has **not** been validated against live network devices. The
-test suite mocks the NAPALM driver throughout. Together with Veeam this is the
-largest verification gap in the line — but unlike Veeam it is **self-testable**
-without buying hardware:
+`network-aiops` has two independent halves. They verify separately:
+
+| Half | Status |
+|---|---|
+| **NetBox source-of-truth** (`netbox_*` tools, pynetbox) | ✅ **Live-verified** — real NetBox 4.6.6, 2026-07-30 (see below) |
+| **NAPALM device-side** (facts / health / config / neighbors / RCA) | ⚠️ **mock-only** — still needs real devices/containerlab |
+
+### ✅ NetBox half — live-verified against NetBox 4.6.6 (2026-07-30)
+
+Verified with `netbox-community/netbox-docker` (NetBox 4.6.6) on arm64, seeded
+with real data (devices with/without primary IP, interfaces with/without MAC,
+>limit devices), driven through the **real governed MCP tools**
+(`netbox_list_devices` / `netbox_get_device` / `netbox_device_interfaces`) with
+an `audit_log` row confirmed (`status=ok`). Findings:
+
+- **Field mapping is correct** against a real NetBox 4.6 schema: `role` (the
+  3.x→4.x `device_role`→`role` rename is handled), `site`, `status`,
+  `device_type`, `serial`, and `mac_address` (resolves correctly even though
+  NetBox 4.2+ moved MACs to a separate model).
+- **`primary_ip` returns JSON `null`** when a device has none — the null-vs-empty
+  invariant holds (not a `"none"` string).
+- The **truncation envelope** (`returned`/`limit`/`truncated`) is measured
+  correctly (limit+1 probe) against real pagination.
+- **Auth**: NetBox 4.6 introduced **v2 tokens** displayed as `nbt_<key>.<secret>`.
+  Passing that full string as the token works out of the box (NetBox infers the
+  version from the `nbt_` prefix). Legacy v1 tokens also work. If you paste only
+  the bare secret (dropping the `nbt_<key>.` prefix) NetBox returns
+  `403 "Invalid v1 token"` — that is a token-format mistake, not a tool bug.
+
+Not covered by this run: `mac_address` write-back paths and NetBox versions
+other than 4.6.
+
+### ⚠️ NAPALM device-side — still mock-only
+
+The device-side test suite mocks the NAPALM driver throughout. This remains the
+largest verification gap in the line (with Veeam) — but unlike Veeam it is
+**self-testable** without buying hardware:
 
 - **Arista cEOS** or **Juniper vMX/vQFX** container/VM images
 - **containerlab** to wire a small multi-vendor lab
