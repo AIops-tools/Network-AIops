@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — 2026-08-02
+## v0.9.0 — 2026-08-02
 
 ### Changed (BREAKING)
 - **Requires MCP SDK 2.0** (`mcp[cli]>=2.0,<3.0`). `mcp.server.fastmcp` no longer exists in 2.0; the server is now built with `MCPServer` and reports its package version in the stdio handshake.
@@ -39,7 +39,7 @@ See RELEASE_NOTES.md for tool-specific changes.
 
 See RELEASE_NOTES.md for the full detail.
 
-## Unreleased
+## v0.9.0 — 2026-08-02
 
 ### Added
 - **Diagnostics / RCA (read-only, `risk_level=low`)**: two flagship analyses that
