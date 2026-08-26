@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "network-aiops": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "network-aiops==0.11.0",
+        "network-aiops-mcp"
+      ]
+    }
+  }
+}

@@ -114,6 +114,21 @@ system prompt for what's left.
 
 ## Quick Start
 
+### As a Claude Code plugin
+
+One install gives an agent both the skill and the MCP server:
+
+```
+/plugin marketplace add AIops-tools/marketplace
+/plugin install network-aiops@aiops-tools
+```
+
+The MCP server is fetched with [uv](https://docs.astral.sh/uv/) and pinned to the
+package version this plugin declares, so an audit row can be traced back to the
+code that wrote it. Credentials are still configured with `network-aiops init` — see below.
+
+### As a CLI or standalone MCP server
+
 ```bash
 uv tool install network-aiops
 network-aiops init                                  # wizard: device + driver + host + encrypted password

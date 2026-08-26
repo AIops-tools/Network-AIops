@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "network-aiops",
+  "displayName": "Network AIops",
+  "version": "0.11.0",
+  "description": "Governed network device ops (NAPALM) — 33 MCP tools with audit/undo.",
+  "author": {
+    "name": "Wei Zhou",
+    "email": "zhouwei008@gmail.com",
+    "url": "https://github.com/AIops-tools"
+  },
+  "homepage": "https://github.com/AIops-tools/Network-AIops",
+  "repository": "https://github.com/AIops-tools/Network-AIops",
+  "license": "MIT",
+  "keywords": [
+    "aiops",
+    "mcp",
+    "governance",
+    "network"
+  ]
+}
