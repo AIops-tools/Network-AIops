@@ -56,6 +56,13 @@ network-aiops init            # interactive wizard: device + driver + host + enc
 network-aiops doctor          # checks config, encrypted secret store, and per-device password presence
 ```
 
+Or as an OpenClaw plugin, which installs this skill and its MCP server together:
+
+```bash
+openclaw plugins install clawhub:@aiops-tools/network-aiops
+openclaw skills info network-aiops          # expect: Visible to model: yes
+```
+
 `init` writes `~/.network-aiops/config.yaml` and stores secrets **encrypted** in `~/.network-aiops/secrets.enc`. Export `NETWORK_AIOPS_MASTER_PASSWORD` in your shell profile so the CLI and MCP server can unlock secrets non-interactively.
 
 ## Supported Devices
