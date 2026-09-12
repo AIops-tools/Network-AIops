@@ -1,6 +1,6 @@
 {
-  "name": "@aiops-tools/network-aiops",
-  "version": "0.12.4",
+  "name": "@zw008/network-aiops",
+  "version": "0.12.2",
   "description": "Governed network device ops (NAPALM) — 33 MCP tools with audit/undo.",
   "private": true,
   "license": "MIT",
