@@ -1,0 +1,24 @@
+{
+  "id": "network-aiops",
+  "name": "Network AIops",
+  "description": "Governed network device ops (NAPALM) — 33 MCP tools with audit/undo.",
+  "skills": [
+    "./skills"
+  ],
+  "mcpServers": {
+    "network-aiops": {
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "network-aiops==0.12.0",
+        "network-aiops-mcp"
+      ]
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

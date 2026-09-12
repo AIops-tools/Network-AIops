@@ -17,7 +17,7 @@ installer:
 argument-hint: "[device name or describe your network task]"
 allowed-tools:
   - Bash
-metadata: {"openclaw":{"requires":{"env":["NETWORK_AIOPS_CONFIG"],"bins":["network-aiops"],"config":["~/.network-aiops/config.yaml"]},"optional":{"env":["NETWORK_AIOPS_HOME","NETWORK_AIOPS_MASTER_PASSWORD","NETWORK_NETBOX_TOKEN"]},"primaryEnv":"NETWORK_AIOPS_CONFIG","homepage":"https://github.com/AIops-tools/Network-AIops","emoji":"🛜","os":["macos","linux"]}}
+metadata: {"openclaw":{"requires":{"anyBins":["network-aiops","uvx"]},"optional":{"env":["NETWORK_AIOPS_CONFIG","NETWORK_AIOPS_HOME","NETWORK_AIOPS_MASTER_PASSWORD","NETWORK_NETBOX_TOKEN"]},"homepage":"https://github.com/AIops-tools/Network-AIops","emoji":"🛜","os":["macos","linux"]}}
 compatibility: >
   Standalone, self-governed network device operations over NAPALM. The governance harness (audit, policy, token/runaway budget, undo, risk-tiers) is bundled in the package — no external skill-family dependency.
   All write operations are audited to a local SQLite DB under ~/.network-aiops/ (relocatable via NETWORK_AIOPS_HOME).
