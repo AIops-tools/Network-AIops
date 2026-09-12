@@ -63,6 +63,8 @@ openclaw plugins install clawhub:@aiops-tools/network-aiops
 openclaw skills info network-aiops          # expect: Visible to model: yes
 ```
 
+Needs `uvx` on `PATH`: the MCP server is fetched with uv, pinned to this release.
+
 `init` writes `~/.network-aiops/config.yaml` and stores secrets **encrypted** in `~/.network-aiops/secrets.enc`. Export `NETWORK_AIOPS_MASTER_PASSWORD` in your shell profile so the CLI and MCP server can unlock secrets non-interactively.
 
 ## Supported Devices
