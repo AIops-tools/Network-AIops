@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from network_aiops.cli._common import TargetOption, cli_errors, get_manager
+from network_aiops.cli._common import TargetOption, audited, cli_errors, get_manager
 from network_aiops.ops import environment as env_ops
 from network_aiops.ops import facts
 from network_aiops.ops import health as health_ops
@@ -42,6 +42,7 @@ def _simple_table(title: str, columns: tuple[str, ...], rows: list[dict]) -> Non
 
 @device_app.command("facts")
 @cli_errors
+@audited
 def device_facts_cmd(target: TargetOption = None) -> None:
     """Show core device facts (hostname, vendor, model, OS, serial, uptime)."""
     result = facts.device_facts(_resolve(target))
@@ -52,6 +53,7 @@ def device_facts_cmd(target: TargetOption = None) -> None:
 
 @device_app.command("interfaces")
 @cli_errors
+@audited
 def device_interfaces_cmd(target: TargetOption = None) -> None:
     """List interfaces (up/down, enabled, speed, description)."""
     rows = facts.get_interfaces(_resolve(target))
@@ -68,6 +70,7 @@ def device_interfaces_cmd(target: TargetOption = None) -> None:
 
 @device_app.command("bgp")
 @cli_errors
+@audited
 def device_bgp_cmd(target: TargetOption = None) -> None:
     """Show BGP neighbors (vrf, neighbor, remote AS, up, prefixes)."""
     rows = facts.get_bgp_neighbors(_resolve(target))
@@ -84,6 +87,7 @@ def device_bgp_cmd(target: TargetOption = None) -> None:
 
 @device_app.command("lldp")
 @cli_errors
+@audited
 def device_lldp_cmd(target: TargetOption = None) -> None:
     """Show LLDP neighbors (local port, remote host, remote port)."""
     rows = facts.get_lldp_neighbors(_resolve(target))
@@ -97,6 +101,7 @@ def device_lldp_cmd(target: TargetOption = None) -> None:
 
 @device_app.command("arp")
 @cli_errors
+@audited
 def device_arp_cmd(target: TargetOption = None) -> None:
     """Show the ARP table (interface, IP, MAC, age)."""
     rows = facts.get_arp_table(_resolve(target))
@@ -110,6 +115,7 @@ def device_arp_cmd(target: TargetOption = None) -> None:
 
 @device_app.command("counters")
 @cli_errors
+@audited
 def device_counters_cmd(target: TargetOption = None) -> None:
     """Show interface traffic + error counters."""
     rows = inv_ops.get_interfaces_counters(_resolve(target))
@@ -122,6 +128,7 @@ def device_counters_cmd(target: TargetOption = None) -> None:
 
 @device_app.command("mac")
 @cli_errors
+@audited
 def device_mac_cmd(target: TargetOption = None) -> None:
     """Show the MAC address table (MAC, interface, VLAN, static/active)."""
     rows = inv_ops.get_mac_address_table(_resolve(target))
@@ -130,6 +137,7 @@ def device_mac_cmd(target: TargetOption = None) -> None:
 
 @device_app.command("vlans")
 @cli_errors
+@audited
 def device_vlans_cmd(target: TargetOption = None) -> None:
     """Show VLANs (id, name, interface count)."""
     rows = inv_ops.get_vlans(_resolve(target))
@@ -143,6 +151,7 @@ def device_vlans_cmd(target: TargetOption = None) -> None:
 
 @device_app.command("route")
 @cli_errors
+@audited
 def device_route_cmd(
     destination: str,
     target: TargetOption = None,
@@ -159,6 +168,7 @@ def device_route_cmd(
 
 @device_app.command("environment")
 @cli_errors
+@audited
 def device_environment_cmd(target: TargetOption = None) -> None:
     """Show hardware environment (fans, temperature, power, CPU, memory)."""
     env = env_ops.get_environment(_resolve(target))
@@ -172,6 +182,7 @@ def device_environment_cmd(target: TargetOption = None) -> None:
 
 @device_app.command("health")
 @cli_errors
+@audited
 def device_health_cmd(target: TargetOption = None) -> None:
     """Show an aggregated health summary (facts + interfaces + environment)."""
     h = health_ops.device_health(_resolve(target))

@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from network_aiops.cli._common import TargetOption, cli_errors, get_manager
+from network_aiops.cli._common import TargetOption, audited, cli_errors, get_manager
 from network_aiops.ops import diagnostics as diag
 from network_aiops.ops import facts
 from network_aiops.ops import inventory as inv_ops
@@ -42,6 +42,7 @@ def _print_findings(findings: list[dict]) -> None:
 
 @diagnose_app.command("interface-health")
 @cli_errors
+@audited
 def diagnose_interface_health(target: TargetOption = None) -> None:
     """Flag admin-up/oper-down interfaces, error/discard counters, recent flaps."""
     dev = _resolve(target)
@@ -54,6 +55,7 @@ def diagnose_interface_health(target: TargetOption = None) -> None:
 
 @diagnose_app.command("bgp")
 @cli_errors
+@audited
 def diagnose_bgp(target: TargetOption = None) -> None:
     """Flag BGP neighbors not up / recently reset / learning no prefixes."""
     dev = _resolve(target)

@@ -24,6 +24,7 @@ from network_aiops.cli._common import (
     DryRunOption,
     OutputOption,
     TargetOption,
+    audited,
     cli_errors,
     double_confirm,
     dry_run_preview,
@@ -148,6 +149,7 @@ def _print_commit(result: dict) -> None:
 
 @config_app.command("backup")
 @cli_errors
+@audited
 def config_backup_cmd(
     target: TargetOption = None,
     output: OutputOption = None,
@@ -179,6 +181,7 @@ def config_backup_cmd(
 
 @config_app.command("diff")
 @cli_errors
+@audited
 def config_diff_cmd(
     config_file: Path,
     target: TargetOption = None,

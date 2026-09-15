@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from network_aiops.cli._common import cli_errors, get_manager
+from network_aiops.cli._common import audited, cli_errors, get_manager
 from network_aiops.cli.device import _cell
 from network_aiops.ops import netbox_ops
 
@@ -25,6 +25,7 @@ def _print_truncation(result: dict) -> None:
 
 @netbox_app.command("list")
 @cli_errors
+@audited
 def netbox_list_cmd(
     name: str = typer.Option(None, "--name", help="Filter by name (contains)"),
     limit: int = typer.Option(50, "--limit", help="Max devices to return"),
@@ -46,6 +47,7 @@ def netbox_list_cmd(
 
 @netbox_app.command("get")
 @cli_errors
+@audited
 def netbox_get_cmd(name: str) -> None:
     """Show a single NetBox device by exact name."""
     api = get_manager().netbox()
@@ -55,6 +57,7 @@ def netbox_get_cmd(name: str) -> None:
 
 @netbox_app.command("interfaces")
 @cli_errors
+@audited
 def netbox_interfaces_cmd(
     device: str,
     limit: int = typer.Option(100, "--limit", help="Max interfaces to return"),
