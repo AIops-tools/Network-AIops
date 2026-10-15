@@ -1,4 +1,4 @@
-"""Coverage for mcp_server._shared helpers (error sanitisation, tool_errors
+"""Coverage for network_aiops.mcp_server._shared helpers (error sanitisation, tool_errors
 result shapes, lazy manager/target/netbox resolution) and the ``undo`` CLI
 sub-commands (list + confirmed apply) — all mocked.
 """
@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from typer.testing import CliRunner
 
-import mcp_server._shared as shared
+import network_aiops.mcp_server._shared as shared
 from network_aiops.config import AppConfig, TargetConfig
 from network_aiops.connection import ConnectionManager, NetworkApiError
 
@@ -109,9 +109,9 @@ def test_undo_apply_cli_confirmed_dispatches_inverse(gov_home, monkeypatch):
     """`undo apply <id>` past the double-confirm dispatches the recorded inverse
     through its governed tool and marks the token applied."""
     import network_aiops.governance.undo as undo_mod
-    from mcp_server._shared import mcp
     from network_aiops.cli import app
     from network_aiops.governance import governed_tool
+    from network_aiops.mcp_server._shared import mcp
 
     calls: list[str] = []
 

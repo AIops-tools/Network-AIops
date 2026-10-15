@@ -219,7 +219,7 @@ def test_cli_announces_a_truncated_netbox_listing(monkeypatch):
 
 @pytest.mark.unit
 def test_undo_list_envelope_measures_truncation(monkeypatch):
-    from mcp_server.tools import undo as undo_tools
+    from network_aiops.mcp_server.tools import undo as undo_tools
 
     rows = [
         {

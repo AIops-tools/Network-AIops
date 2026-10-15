@@ -134,7 +134,7 @@ def test_real_write_tool_persists_priorstate_undo(gov_home, monkeypatch):
     dev.compare_config.return_value = "+ ntp server 10.0.0.99"
     monkeypatch.setattr(conn_mod, "_driver_for", lambda target: driver_cls)
 
-    from mcp_server.tools import config_ops as gov
+    from network_aiops.mcp_server.tools import config_ops as gov
 
     target = TargetConfig(name="core-sw1", driver="eos", host="10.0.0.1", username="admin")
     monkeypatch.setattr(gov, "_target", lambda name=None: target)

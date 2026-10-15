@@ -1,7 +1,7 @@
 """CLI confirmed-write path — past dry-run, through governance, onto disk.
 
 The CLI write commands delegate real execution to the ``@governed_tool``
-functions in ``mcp_server.tools``. These tests drive a write command PAST the
+functions in ``network_aiops.mcp_server.tools``. These tests drive a write command PAST the
 dry-run branch and the double-confirm prompts and assert the call really went
 through the governed path (audit row on disk) — the regression test for the
 "CLI writes were unaudited" line-wide fix.
@@ -46,7 +46,7 @@ def fake_device(monkeypatch):
     """Route both the CLI's target resolution and the NAPALM driver to fakes."""
     import network_aiops.cli.config as cli_config
     import network_aiops.connection as conn_mod
-    from mcp_server.tools import config_ops as gov
+    from network_aiops.mcp_server.tools import config_ops as gov
 
     target = TargetConfig(name="core-sw1", driver="eos", host="10.0.0.1", username="admin")
     driver_cls = MagicMock(name="driver_cls")

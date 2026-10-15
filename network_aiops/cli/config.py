@@ -19,7 +19,6 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from mcp_server.tools import config_ops as gov
 from network_aiops.cli._common import (
     DryRunOption,
     OutputOption,
@@ -31,6 +30,7 @@ from network_aiops.cli._common import (
     get_manager,
     read_config_text,
 )
+from network_aiops.mcp_server.tools import config_ops as gov
 from network_aiops.ops import config_ops
 from network_aiops.ops.config_ops import DEFAULT_REVERT_IN
 

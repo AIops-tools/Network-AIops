@@ -88,7 +88,7 @@ skill-family dependency — the governance harness is vendored under
 ## Static Analysis
 
 ```bash
-uvx bandit -r network_aiops/ mcp_server/
+uvx bandit -r network_aiops/
 ```
 
 ## Supported Versions

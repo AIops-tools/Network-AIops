@@ -1,4 +1,4 @@
-"""MCP governed-twin tests: drive each ``@governed_tool`` in mcp_server/tools/*
+"""MCP governed-twin tests: drive each ``@governed_tool`` in network_aiops/mcp_server/tools/*
 against a mocked NAPALM driver (and mocked NetBox client) on an isolated
 governance home. These assert the governed wrapper actually reaches the op and
 returns the mapped payload (and, for reads, does NOT return an error dict), plus
@@ -11,13 +11,13 @@ import sqlite3
 
 import pytest
 
-from mcp_server.tools import config_ops as config_tools
-from mcp_server.tools import environment as env_tools
-from mcp_server.tools import facts as facts_tools
-from mcp_server.tools import health as health_tools
-from mcp_server.tools import inventory as inv_tools
-from mcp_server.tools import neighbors as nbr_tools
-from mcp_server.tools import netbox as netbox_tools
+from network_aiops.mcp_server.tools import config_ops as config_tools
+from network_aiops.mcp_server.tools import environment as env_tools
+from network_aiops.mcp_server.tools import facts as facts_tools
+from network_aiops.mcp_server.tools import health as health_tools
+from network_aiops.mcp_server.tools import inventory as inv_tools
+from network_aiops.mcp_server.tools import neighbors as nbr_tools
+from network_aiops.mcp_server.tools import netbox as netbox_tools
 
 
 @pytest.fixture
@@ -143,7 +143,7 @@ def test_governed_config_rollback_dry_run_digests_without_rolling_back(
 def test_governed_config_merge_records_undo_and_apply_previews(gov_home, target_read):
     """End-to-end: governed merge records a real undo token; undo_apply dry-run
     previews the inverse (config_replace back to the captured backup)."""
-    from mcp_server.tools import undo as undo_tools
+    from network_aiops.mcp_server.tools import undo as undo_tools
 
     result = config_tools.config_merge(config_text="ntp server 10.0.0.99")
     assert result["committed"] is True

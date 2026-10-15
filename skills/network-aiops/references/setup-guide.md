@@ -130,5 +130,5 @@ Prefer the installed entry point — it does not re-resolve PyPI at launch.
 ## Static analysis
 
 ```bash
-uvx bandit -r network_aiops/ mcp_server/
+uvx bandit -r network_aiops/
 ```

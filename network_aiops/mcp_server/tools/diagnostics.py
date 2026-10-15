@@ -9,8 +9,8 @@ the connection is.
 
 from typing import Optional
 
-from mcp_server._shared import _target, mcp, tool_errors
 from network_aiops.governance import governed_tool
+from network_aiops.mcp_server._shared import _target, mcp, tool_errors
 from network_aiops.ops import diagnostics as diag
 from network_aiops.ops import facts, inventory
 

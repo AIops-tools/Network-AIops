@@ -6,8 +6,8 @@ when NetBox is not configured, instead of an opaque traceback.
 
 from typing import Optional
 
-from mcp_server._shared import _netbox, mcp, tool_errors
 from network_aiops.governance import governed_tool
+from network_aiops.mcp_server._shared import _netbox, mcp, tool_errors
 from network_aiops.ops import netbox_ops as ops
 
 

@@ -252,7 +252,7 @@ def _target_config():
 @pytest.mark.unit
 def test_interface_health_rca_tool_collects_and_is_governed(monkeypatch):
     import network_aiops.connection as conn_mod
-    from mcp_server.tools import diagnostics as diag_tools
+    from network_aiops.mcp_server.tools import diagnostics as diag_tools
 
     monkeypatch.setattr(conn_mod, "_driver_for", lambda target: _FakeDriver)
     monkeypatch.setattr(diag_tools, "_target", lambda name=None: _target_config())
@@ -270,7 +270,7 @@ def test_interface_health_rca_tool_collects_and_is_governed(monkeypatch):
 @pytest.mark.unit
 def test_bgp_neighbor_rca_tool_collects_and_is_governed(monkeypatch):
     import network_aiops.connection as conn_mod
-    from mcp_server.tools import diagnostics as diag_tools
+    from network_aiops.mcp_server.tools import diagnostics as diag_tools
 
     monkeypatch.setattr(conn_mod, "_driver_for", lambda target: _FakeDriver)
     monkeypatch.setattr(diag_tools, "_target", lambda name=None: _target_config())

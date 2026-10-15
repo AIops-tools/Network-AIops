@@ -347,7 +347,7 @@ def test_unknown_pending_state_still_confirms(monkeypatch):
 
 @pytest.mark.unit
 def test_mcp_merge_threads_revert_in_through(driver, monkeypatch):
-    from mcp_server.tools import config_ops as cfg_tools
+    from network_aiops.mcp_server.tools import config_ops as cfg_tools
 
     monkeypatch.setattr(cfg_tools, "_target", lambda name=None: TARGET)
     cfg_tools.config_merge(config_text="ntp server 10.0.0.99", revert_in=45)
@@ -361,7 +361,7 @@ def test_recorded_inverse_carries_raw_config_and_disables_its_own_timer(
     """The rollback must be permanent: nobody confirms an undo, so an inverse
     that armed its own timer would put the broken config straight back."""
     import network_aiops.governance.undo as undo_mod
-    from mcp_server.tools import config_ops as cfg_tools
+    from network_aiops.mcp_server.tools import config_ops as cfg_tools
 
     monkeypatch.setattr(cfg_tools, "_target", lambda name=None: TARGET)
     recorded: dict = {}
@@ -384,7 +384,7 @@ def test_recorded_inverse_carries_raw_config_and_disables_its_own_timer(
 @pytest.mark.unit
 def test_no_inverse_is_recorded_without_a_usable_backup(driver, monkeypatch):
     import network_aiops.governance.undo as undo_mod
-    from mcp_server.tools import config_ops as cfg_tools
+    from network_aiops.mcp_server.tools import config_ops as cfg_tools
 
     monkeypatch.setattr(cfg_tools, "_target", lambda name=None: TARGET)
     driver.running = ""
@@ -525,7 +525,7 @@ def test_dry_run_does_not_leak_the_config_body(driver):
 
 @pytest.mark.unit
 def test_mcp_dry_run_refuses_and_makes_no_commit(driver, monkeypatch):
-    from mcp_server.tools import config_ops as cfg_tools
+    from network_aiops.mcp_server.tools import config_ops as cfg_tools
 
     monkeypatch.setattr(cfg_tools, "_target", lambda name=None: TARGET)
     driver.running = ""
@@ -539,7 +539,7 @@ def test_mcp_dry_run_refuses_and_makes_no_commit(driver, monkeypatch):
 
 @pytest.mark.unit
 def test_mcp_dry_run_previews_an_allowed_write(driver, monkeypatch):
-    from mcp_server.tools import config_ops as cfg_tools
+    from network_aiops.mcp_server.tools import config_ops as cfg_tools
 
     monkeypatch.setattr(cfg_tools, "_target", lambda name=None: TARGET)
 

@@ -67,16 +67,16 @@ def test_all_modules_import():
         "network_aiops.cli.secret",
         "network_aiops.cli.init",
         "network_aiops.cli.doctor",
-        "mcp_server.server",
-        "mcp_server._shared",
-        "mcp_server.tools.facts",
-        "mcp_server.tools.neighbors",
-        "mcp_server.tools.inventory",
-        "mcp_server.tools.environment",
-        "mcp_server.tools.health",
-        "mcp_server.tools.diagnostics",
-        "mcp_server.tools.config_ops",
-        "mcp_server.tools.netbox",
+        "network_aiops.mcp_server.server",
+        "network_aiops.mcp_server._shared",
+        "network_aiops.mcp_server.tools.facts",
+        "network_aiops.mcp_server.tools.neighbors",
+        "network_aiops.mcp_server.tools.inventory",
+        "network_aiops.mcp_server.tools.environment",
+        "network_aiops.mcp_server.tools.health",
+        "network_aiops.mcp_server.tools.diagnostics",
+        "network_aiops.mcp_server.tools.config_ops",
+        "network_aiops.mcp_server.tools.netbox",
     ):
         importlib.import_module(name)
 
@@ -142,7 +142,7 @@ def test_cli_leaf_help_triggers_lazy_imports():
 
 @pytest.mark.unit
 def test_mcp_list_tools_exposes_expected_tools():
-    from mcp_server.server import mcp
+    from network_aiops.mcp_server.server import mcp
 
     tools = asyncio.run(mcp.list_tools())
     names = {t.name for t in tools}
@@ -152,7 +152,7 @@ def test_mcp_list_tools_exposes_expected_tools():
 @pytest.mark.unit
 def test_every_mcp_tool_is_governed_by_harness():
     """Every registered tool callable must carry the @governed_tool marker."""
-    from mcp_server import _shared
+    from network_aiops.mcp_server import _shared
 
     tool_objs = _shared.mcp._tool_manager._tools
     assert EXPECTED_TOOLS <= set(tool_objs), "tool registry incomplete"
@@ -511,8 +511,8 @@ def test_config_diff_is_dry_run(monkeypatch):
 def test_config_merge_records_replace_to_backup_undo(monkeypatch):
     """config_merge records a config_replace-to-backup inverse with _undo_id."""
     import network_aiops.governance.undo as undo_mod
-    from mcp_server.tools import config_ops as cfg_tools
     from network_aiops.config import TargetConfig
+    from network_aiops.mcp_server.tools import config_ops as cfg_tools
 
     _patch_napalm(monkeypatch)
     target = TargetConfig(name="core-sw1", driver="eos", host="10.0.0.1", username="admin")
@@ -543,8 +543,8 @@ def test_config_merge_records_replace_to_backup_undo(monkeypatch):
 def test_config_replace_records_undo(monkeypatch):
     """config_replace (high risk) records a restore-to-backup inverse."""
     import network_aiops.governance.undo as undo_mod
-    from mcp_server.tools import config_ops as cfg_tools
     from network_aiops.config import TargetConfig
+    from network_aiops.mcp_server.tools import config_ops as cfg_tools
 
     _patch_napalm(monkeypatch)
     target = TargetConfig(name="core-sw1", driver="eos", host="10.0.0.1", username="admin")
@@ -655,7 +655,7 @@ def test_risk_level_agrees_with_read_write_docstring_tag():
     16 such mislabels line-wide once, so it is kept even though read-only mode
     (its original motivation) is gone.
     """
-    from mcp_server import server
+    from network_aiops.mcp_server import server
 
     untagged, mismatched = [], []
     for name, tool in server.mcp._tool_manager._tools.items():

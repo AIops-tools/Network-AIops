@@ -358,7 +358,7 @@ def test_cli_diff_masks_by_default_and_opts_out(device_cli, secretful_diff, tmp_
 
 
 def test_the_mcp_twin_defaults_to_redacted(secretful_device, gov_home, monkeypatch):
-    from mcp_server.tools import config_ops as gov
+    from network_aiops.mcp_server.tools import config_ops as gov
 
     monkeypatch.setattr(gov, "_target", lambda name=None: _eos())
     result = gov.config_backup()
@@ -367,7 +367,7 @@ def test_the_mcp_twin_defaults_to_redacted(secretful_device, gov_home, monkeypat
 
 
 def test_the_mcp_twin_honours_include_secrets(secretful_device, gov_home, monkeypatch):
-    from mcp_server.tools import config_ops as gov
+    from network_aiops.mcp_server.tools import config_ops as gov
 
     monkeypatch.setattr(gov, "_target", lambda name=None: _eos())
     result = gov.config_backup(include_secrets=True)

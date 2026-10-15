@@ -22,9 +22,9 @@ none, since it silently changes what "I read the config" means.
 
 from typing import Optional
 
-from mcp_server._shared import _target, mcp, tool_errors
 from network_aiops.governance import governed_tool
 from network_aiops.governance.outcome import take_prior_state
+from network_aiops.mcp_server._shared import _target, mcp, tool_errors
 from network_aiops.ops import config_ops as ops
 from network_aiops.ops.config_ops import DEFAULT_REVERT_IN
 
