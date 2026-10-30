@@ -179,3 +179,7 @@ Every box ticked against at least one real NOS per driver family, with the
 platform/version recorded; any field-shape or driver gap fixed (or documented)
 and covered by a test; result written up with the date and versions. Until
 then this document must continue to say mock-only.
+
+## Governance hardening — local synthetic verification (2026-10-30)
+
+The shared governance tests exercise a durable `pending` row before a write, refusal when the audit DB cannot persist that row, a visible pending row after finalization failure, explicit reconciliation to `unknown`, async/preview parity, result minimization, and metadata-only telemetry with `AIOPS_WORKFLOW_ID`. The tests use a temporary SQLite DB and synthetic tools; they do not claim a new live upstream write was performed. Existing audit rows and rotated archives from earlier releases are not automatically scrubbed. A pending intent from another process is never auto-reconciled. On POSIX the rotation/intent lock spans processes; on Windows it currently protects only threads in this process.

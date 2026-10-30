@@ -1,6 +1,8 @@
 <!-- mcp-name: io.github.AIops-tools/network-aiops -->
 # network-aiops
 
+> **Audit availability:** Real writes require a committed `pending` audit row and stop before contacting the platform if storage is unavailable. Reads and previews may continue with a warning; new audit rows store outcome summaries rather than full responses.
+
 > **Disclaimer**: This is a community-maintained open-source project and is **not
 > affiliated with, endorsed by, or sponsored by Cisco, Arista, Juniper, NetBox
 > Labs, or any network vendor.** Vendor and product names are trademarks of their

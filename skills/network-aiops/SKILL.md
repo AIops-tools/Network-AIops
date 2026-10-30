@@ -30,6 +30,8 @@ compatibility: >
 
 # Network AIops
 
+> **Audit availability:** Real writes require a durable audit intent. Reads and previews can continue if audit storage fails; check the warning and audit health before relying on their audit trail.
+
 > **Disclaimer**: This is a community-maintained open-source project and is **not affiliated with, endorsed by, or sponsored by Cisco, Arista, Juniper, NetBox Labs, or any network vendor.** Vendor and product names are trademarks of their respective owners. Source code is publicly auditable at [github.com/AIops-tools/Network-AIops](https://github.com/AIops-tools/Network-AIops) under the MIT license.
 
 Governed multi-vendor network device operations — **33 MCP tools**, every one wrapped with the bundled `@governed_tool` harness: a local unified audit log under `~/.network-aiops/`, token/runaway budget guard, undo-token recording, and descriptive risk-tier labels. Devices are reached over NAPALM; an optional NetBox block adds source-of-truth lookups. Secrets (device passwords + NetBox token) are kept in an **encrypted store** (`secrets.enc`), unlocked by `NETWORK_AIOPS_MASTER_PASSWORD`.
@@ -264,7 +266,7 @@ The device may not support full config replace (some Nexus images do not). Use `
 
 The skill delivers reads and writes and records them; it does **not** decide whether a write is permitted. That is your agent's judgement, or the permission of the account you connect it with (log in with a device account at a read-only privilege level, and give NetBox a read-only API token — writes then fail at the server). There is no read-only switch, policy file, or approval gate.
 
-- **Audit is the guarantee, and it is not bypassable.** Every operation — MCP and CLI alike — is logged to `~/.network-aiops/audit.db` (relocatable via `NETWORK_AIOPS_HOME`): params, result, status, duration, and the risk tier. The CLI writes the same row the MCP path does.
+- **Audit is the guarantee, and it is not bypassable.** Every operation — MCP and CLI alike — is logged to `~/.network-aiops/audit.db` (relocatable via `NETWORK_AIOPS_HOME`): params, outcome summary, status, duration, and the risk tier. The CLI writes the same row the MCP path does.
 - `NETWORK_AUDIT_APPROVED_BY` / `NETWORK_AUDIT_RATIONALE` are optional annotations recorded on the audit row (who/why); they are never required and never block.
 - **Runaway guard** — a safety backstop, not authorization: the same call looped in a tight window trips a circuit breaker. Disable with `NETWORK_RUNAWAY_MAX=0`.
 - Undo store records inverse descriptors for reversible writes (config merge/replace → restore captured running config).
